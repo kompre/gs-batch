@@ -548,6 +548,17 @@ files = [
 ]
 
 [[package]]
+name = "pyxdg"
+version = "0.28"
+description = "PyXDG contains implementations of freedesktop.org standards in python."
+optional = false
+python-versions = "*"
+files = [
+    {file = "pyxdg-0.28-py2.py3-none-any.whl", hash = "sha256:bdaf595999a0178ecea4052b7f4195569c1ff4d344567bccdc12dfdf02d545ab"},
+    {file = "pyxdg-0.28.tar.gz", hash = "sha256:3267bb3074e934df202af2ee0868575484108581e6f3cb006af1da35395e88b4"},
+]
+
+[[package]]
 name = "pyzmq"
 version = "26.2.0"
 description = "Python bindings for 0MQ"
@@ -669,6 +680,22 @@ files = [
 cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
 [[package]]
+name = "show-in-file-manager"
+version = "1.1.5"
+description = "Open the system file manager and select files in it"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "show-in-file-manager-1.1.5.tar.gz", hash = "sha256:ed13a180a1d48fd88fdd4c58bfbcb3860268641a38805192c814d41387192d84"},
+    {file = "show_in_file_manager-1.1.5-py3-none-any.whl", hash = "sha256:a92a9ab2cd20fca45db5a8b2d2136e4bec624b182f000900855b2d992abd0cbc"},
+]
+
+[package.dependencies]
+packaging = "*"
+pywin32 = {version = ">=301", markers = "platform_system == \"Windows\""}
+pyxdg = {version = ">=0.25", markers = "platform_system == \"Linux\""}
+
+[[package]]
 name = "six"
 version = "1.16.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -719,6 +746,26 @@ files = [
 ]
 
 [[package]]
+name = "tqdm"
+version = "4.66.5"
+description = "Fast, Extensible Progress Meter"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "tqdm-4.66.5-py3-none-any.whl", hash = "sha256:90279a3770753eafc9194a0364852159802111925aa30eb3f9d85b0e805ac7cd"},
+    {file = "tqdm-4.66.5.tar.gz", hash = "sha256:e1020aef2e5096702d8a025ac7d16b1577279c9d63f8375b63083e9a5f0fcbad"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["pytest (>=6)", "pytest-cov", "pytest-timeout", "pytest-xdist"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["slack-sdk"]
+telegram = ["requests"]
+
+[[package]]
 name = "traitlets"
 version = "5.14.3"
 description = "Traitlets Python configuration system"
@@ -747,4 +794,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "813f15004be5e117f7fb6ebc4eac2ea50bacd433f5c9de2f8600b9ca71238c03"
+content-hash = "e77b036dbefe5433800ea2f2932d792b0612c854eec5cb30a137c06e3ad42e71"

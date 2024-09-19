@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "gs-batch"
-version = "0.1.0"
+version = "0.1.1b0"
 description = ""
 authors = ["kompre <s.follador@gmail.com>"]
 readme = "README.md"
+license = "MIT"
 packages = [
     { include = "gs_batch" },
 ]
@@ -14,6 +15,8 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 click = "^8.1.7"
+tqdm = "^4.66.5"
+show-in-file-manager = "^1.1.5"
 
 
 [tool.poetry.group.dev.dependencies]
