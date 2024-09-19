@@ -86,7 +86,7 @@ After processing, gs_batch will display a summary table showing the original siz
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.12+
 - Ghostscript
 - click
 - tqdm
