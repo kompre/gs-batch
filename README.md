@@ -18,7 +18,9 @@ It offers convenient default settings for compression, PDF/A conversion, and you
 
 ## Installation
 
-To install `gs_batch`, make sure you have Python 3.12+ and [pipx](https://github.com/pypa/pipx)^[`pipx` will let you install the package in a virtual environment, but the commands will be available from the command line] installed, then run:
+To install `gs_batch`, make sure you have Python 3.12+ and [pipx](https://github.com/pypa/pipx)[^1] installed, then run:
+
+ [^1]:`pipx` will let you install the package in a virtual environment, but the commands will be available from the command line
 
 ```
 pipx install git+https://github.com/kompre/gs-batch.git
