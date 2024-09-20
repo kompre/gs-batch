@@ -94,9 +94,9 @@ def run_ghostscript(id: int, args: list) -> None:
         click.echo(f"Error executing Ghostscript: {e}")
 
 
-def process_file(file_info: Tuple[str, list, str, str, bool]) -> Dict[str, str]:
+def process_file(file_info: Tuple[str, list, str, str, bool, bool]) -> Dict[str, str]:
     """Process a single PDF file with Ghostscript and move/rename the output based on size."""
-    id, pdf_file, command_parts, prefix, suffix, keep_smaller = file_info
+    id, pdf_file, command_parts, prefix, suffix, keep_smaller, force = file_info
 
     # Create a temporary output file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_output:
@@ -111,13 +111,13 @@ def process_file(file_info: Tuple[str, list, str, str, bool]) -> Dict[str, str]:
     run_ghostscript(id, gs_command)
 
     # Move or rename the output file
-    result = move_output(temp_output_file, pdf_file, prefix, suffix, keep_smaller)
+    result = move_output(temp_output_file, pdf_file, prefix, suffix, keep_smaller, force)
 
     return result
 
 
 def move_output(
-    temp_file: str, original_file: str, prefix: str, suffix: str, keep_smaller: bool
+    temp_file: str, original_file: str, prefix: str, suffix: str, keep_smaller: bool, force: bool
 ) -> Dict[str, str]:
     """Rename or move the output file, keeping either the original or new file based on size comparison."""
     root, _ = os.path.split(original_file)
@@ -135,13 +135,30 @@ def move_output(
     original_size = os.path.getsize(original_file)
     new_size = os.path.getsize(temp_file)
     ratio = new_size / original_size
+    
+    # conditions for file copy or move
     keeping = "original" if keep_smaller and new_size >= original_size else "new"
+    is_same_path = os.path.abspath(original_file) == os.path.abspath(output_file)
+    
+    match (keeping, is_same_path):
+        case ("original", True): # no action is needed
+            os.remove(temp_file)
+            
+        case ("original", False): # copy the original file in the output directory
+            shutil.copy(original_file, output_file)
+            os.remove(temp_file)
+            
+        case ("new", True): # the original file need to be overwritten
+            if force:
+                shutil.move(temp_file, output_file)
+            else:
+                click.echo(f"Error: {output_file} already exists. Use the `--force` flag to allow overwriting files and skip this messages.")
+                keeping = "original"
+                os.remove(temp_file)
+                
+        case ("new", False): # move the new file to the output directory
+                shutil.move(temp_file, output_file)
 
-    if keeping == "original":
-        os.remove(temp_file)
-        shutil.move(original_file, output_file)
-    else:
-        shutil.move(temp_file, output_file)
 
     # Return result for summary
     return {
@@ -182,6 +199,7 @@ def move_output(
     default=True,
     help="Keep the smaller file between old and new (default: keep smaller).",
 )
+@click.option("--force", "-f", is_flag=True, default=False, help="Allow overwriting the original file.")
 @click.argument("files", nargs=-1, type=click.Path(exists=True))
 def gs_batch(
     options: str,
@@ -191,8 +209,22 @@ def gs_batch(
     pdfa: int,
     files: Tuple[str],
     keep_smaller: bool,
+    force: bool,
 ) -> None:
     """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
+    
+    # overwriting alert
+    if not prefix and not force:
+        click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
+        click.secho("Original files may be overwritten if no `--prefix` is specified", bold=True, fg="red")
+        click.secho("(Use the `--force` flag to allow overwriting original files and skip this messages)", fg="black")
+        response = click.prompt("Do you want to overwrite original files?", default='n', type=click.Choice(['y', 'n']))
+        if response == 'y':
+            force = True
+        else:
+            click.echo("Aborting...")
+            return 
+
 
     # Command building logic
     command_parts = []
@@ -214,7 +246,7 @@ def gs_batch(
 
     # Prepare file processing tasks
     file_tasks = [
-        (id, pdf_file, command_parts, prefix, suffix, keep_smaller) for id, pdf_file in enumerate(files)
+        (id, pdf_file, command_parts, prefix, suffix, keep_smaller, force) for id, pdf_file in enumerate(files)
     ]
 
     tic = time.time()
@@ -246,9 +278,4 @@ def gs_batch(
 
 
 if __name__ == "__main__":
-    runner = click.testing.CliRunner()
-    result = runner.invoke(
-        gs_batch,
-        r'--compress=/default --prefix=/tests/ tests/asset/mat.pdf "tests/asset/[23064 - BALSAMO - Treviso - Santa Bona Nuova] Relazione sui materiali.pdf"',
-    )
-    print(result.output)
+    gs_batch()

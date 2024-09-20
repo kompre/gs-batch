@@ -47,6 +47,7 @@ Options:
 - `--prefix TEXT`: Prefix to add to the output file name.
 - `--suffix TEXT`: Suffix to add to the output file name before the extension.
 - `--keep_smaller / --keep_new`: Keep the smaller file between old and new (default: keep smaller).
+- `--force`: Allow overwriting the original file.
 
 ## Examples
 
