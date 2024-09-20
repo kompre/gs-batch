@@ -1,16 +1,23 @@
 [tool.poetry]
 name = "gs-batch"
 version = "0.1.1b0"
-description = ""
+description = "cli tool wrapper for manipulating multiple pdfs file in parallel using ghostscript (compressing, convert to pdfa, etc.)"
 authors = ["kompre <s.follador@gmail.com>"]
 readme = "README.md"
 license = "MIT"
 packages = [
     { include = "gs_batch" },
 ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 
-# [tool.setuptools]
-# packages = ["gs_bacth"]
+[project.urls]
+Homepage = "https://github.com/kompre/gs-batch"
+Issue = "https://github.com/kompre/gs-batch/issues"
+
 
 [tool.poetry.dependencies]
 python = "^3.12"

@@ -1,6 +1,6 @@
 # gs_batch
 
-`gs_batch` is a command-line tool for batch processing PDF files using Ghostscript, applying the same set of gs options to all files specified while taking care of file renaming.
+`gs_batch` is a command-line tool for batch (parallel) processing PDF files using Ghostscript, applying the same set of gs options to all files specified while taking care of file renaming.
 
 It offers convenient default settings for compression, PDF/A conversion, and you can also apply any custom Ghostscript options. 
 
