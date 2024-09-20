@@ -14,7 +14,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-[project.urls]
+[tool.poetry.urls]
 Homepage = "https://github.com/kompre/gs-batch"
 Issue = "https://github.com/kompre/gs-batch/issues"
 
