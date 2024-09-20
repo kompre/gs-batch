@@ -1,6 +1,6 @@
-# gs_batch
+# gs-batch-pdf
 
-`gs_batch` is a command-line tool for batch (parallel) processing PDF files using Ghostscript, applying the same set of gs options to all files specified while taking care of file renaming.
+`gs-batch-pdf` is a command-line tool for batch (parallel) processing PDF files using Ghostscript, applying the same set of gs options to all files specified while taking care of file renaming.
 
 It offers convenient default settings for compression, PDF/A conversion, and you can also apply any custom Ghostscript options. 
 
@@ -18,12 +18,12 @@ It offers convenient default settings for compression, PDF/A conversion, and you
 
 ## Installation
 
-To install `gs_batch`, make sure you have Python 3.12+ and [pipx](https://github.com/pypa/pipx)[^1] installed, then run:
+To install `gs-batch-pdf`, make sure you have Python 3.12+ and [pipx](https://github.com/pypa/pipx)[^1] installed, then run:
 
  [^1]:`pipx` will let you install the package in a virtual environment, but the commands will be available from the command line
 
 ```
-pipx install git+https://github.com/kompre/gs-batch.git
+pipx install gs-batch-pdf
 ```
 
 Note: This tool requires Ghostscript to be installed on your system. Make sure you have Ghostscript installed and accessible from the command line.
@@ -36,7 +36,7 @@ Basic usage:
 `gs_batch` and the its alias `gsb` will be available from the command line.
 
 ```
-gs_batch [OPTIONS] FILES...
+gs-batch-pdf [OPTIONS] FILES...
 ```
 
 Options:
@@ -82,7 +82,7 @@ gs_batch --prefix="./compressed/" --suffix="_v1" --compress=/screen file*.pdf
 
 ## Output
 
-After processing, gs_batch will display a summary table showing the original size, new size, compression ratio, and which file was kept for each processed PDF. The tool will also attempt to open the output folder in your default file manager.
+After processing, gs-batch-pdf will display a summary table showing the original size, new size, compression ratio, and which file was kept for each processed PDF. The tool will also attempt to open the output folder in your default file manager.
 
 ## Requirements
 
@@ -102,4 +102,4 @@ This project is licensed under the MIT License.
 
 ## Acknowledgements
 
-gs_batch uses Ghostscript for PDF processing. Ghostscript is released under the GNU Affero General Public License (AGPL).
+gs-batch-pdf uses Ghostscript for PDF processing. Ghostscript is released under the GNU Affero General Public License (AGPL).
