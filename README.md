@@ -1,6 +1,6 @@
 # gs-batch-pdf
 
-`gs-batch-pdf` is a command-line tool for batch (parallel) processing PDF files using Ghostscript, applying the same set of gs options to all files specified while taking care of file renaming.
+`gs-batch-pdf` is a command-line tool for batch (parallel) processing PDF files using [Ghostscript](https://www.ghostscript.com/), applying the same set of gs options to all files specified while taking care of file renaming.
 
 It offers convenient default settings for compression, PDF/A conversion, and you can also apply any custom Ghostscript options. 
 
@@ -8,7 +8,7 @@ It offers convenient default settings for compression, PDF/A conversion, and you
 
 - Batch process multiple PDF files
 - Compress PDFs with various quality settings
-- Convert PDFs to PDF/A format
+- Convert PDFs to PDF/A format[^1]
 - Apply custom Ghostscript options
 - Multi-threaded processing for improved performance
 - Progress tracking with tqdm
@@ -16,11 +16,13 @@ It offers convenient default settings for compression, PDF/A conversion, and you
 - Option to keep either the smaller file or the new file after processing
 - Cross-platform support (Windows, Linux, macOS)
 
+[^1]: you need to use gs version 10.04.0 or higher for correct PDF/A level 2 or 3 conversion.
+
 ## Installation
 
-To install `gs-batch-pdf`, make sure you have Python 3.12+ and [pipx](https://github.com/pypa/pipx)[^1] installed, then run:
+To install `gs-batch-pdf`, make sure you have Python 3.12+ and [pipx](https://pipx.pypa.io/stable/)[^2] installed, then run:
 
- [^1]:`pipx` will let you install the package in a virtual environment, but the commands will be available from the command line
+[^2]:`pipx` will let you install the package in a virtual environment, but the commands will be available from the command line
 
 ```
 pipx install gs-batch-pdf
@@ -66,6 +68,7 @@ gs_batch --pdfa=2 file1.pdf file2.pdf
 3. Compress and Convert PDFs to PDF/A-2 format all pdfs in a folder:
 
 ```
+# you can use glob patterns
 gs_batch --compress --pdfa=2 *.pdf 
 ```
 

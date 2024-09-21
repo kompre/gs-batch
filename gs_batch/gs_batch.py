@@ -188,7 +188,7 @@ def move_output(
     default=None,
     help="PDF/A version (e.g., 1 for PDF/A-1, 2 for PDF/A-2, 3 for PDF/A-3).",
 )
-@click.option("--prefix", default="", help="Prefix to add to the output file name.")
+@click.option("--prefix", default="", help="Prefix to add to the output file name. Can be path-like (e.g., 'pdfs/').\n NOTE: relative path are calculated relative to pdf file position, not the current working directory.")
 @click.option(
     "--suffix",
     default="",
