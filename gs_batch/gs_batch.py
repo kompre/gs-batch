@@ -14,6 +14,146 @@ from showinfm import show_in_file_manager
 import time
 
 
+@click.command(no_args_is_help=True)
+@click.option(
+    "--options",
+    default=None,
+    help="Arbitrary Ghostscript options and switches. (e.g. '-dColorImageResolution=100 -dCompatibilityLevel=1.4').",
+)
+@click.option(
+    "--compress",
+    default=None,
+    is_flag=False,
+    flag_value="/ebook",
+    show_default=True,
+    type=click.Choice(["/screen", "/ebook", "/printer", "/prepress", "/default"]),
+    help="Compression quality level (e.g., /screen, [/ebook], /printer, /prepress, /default).",
+)
+@click.option(
+    "--pdfa",
+    is_flag=False,
+    flag_value="2",
+    default=None,
+    type=click.Choice(["1", "2", "3"]),
+    help="PDF/A version (e.g., 1 for PDF/A-1, 2 for [PDF/A-2], 3 for PDF/A-3).",
+)
+@click.option(
+    "--prefix",
+    default="",
+    help="Prefix to add to the output file name. Can be path-like (e.g., 'pdfs/').\n NOTE: relative path are calculated relative to input pdf file position, not the current working directory.",
+)
+@click.option(
+    "--suffix",
+    default="",
+    help="Suffix to add to the output file name before the extension.",
+)
+@click.option(
+    "--keep_smaller/--keep_new",
+    default=True,
+    help="Keep the smaller file between old and new (default: keep smaller).",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Allow overwriting the original file.",
+)
+@click.option(
+    "--open_path/--no_open_path",
+    default=True,
+    help="Open the output file path in the filesystem.",
+)
+@click.argument("files", nargs=-1, type=click.Path(exists=True))
+def gs_batch(
+    options: str,
+    prefix: str,
+    suffix: str,
+    compress: str,
+    pdfa: int,
+    files: Tuple[str],
+    keep_smaller: bool,
+    force: bool,
+    open_path: bool,
+) -> None:
+    """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
+
+    # overwriting alert
+    if not prefix and not force:
+        click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
+        click.secho(
+            "Original files may be overwritten if no `--prefix` is specified",
+            bold=True,
+            fg="red",
+        )
+        click.secho(
+            "(Use the `--force` flag to allow overwriting original files and skip this messages)",
+            fg="black",
+        )
+        response = click.prompt(
+            "Do you want to overwrite original files?",
+            default="n",
+            type=click.Choice(["y", "n"]),
+        )
+        if response == "y":
+            force = True
+        else:
+            click.echo("Aborting...")
+            return
+
+    # Command building logic
+    command_parts = []
+    if compress:
+        command_parts.append(f"-dPDFSETTINGS={compress}")
+    if pdfa:
+        command_parts.extend(
+            [
+                "-dPDFACompatibilityPolicy=1",
+                "-sColorConversionStrategy=RGB",
+                f"-dPDFA={pdfa}",
+            ]
+        )
+        keep_smaller = False
+    if options:
+        command_parts.extend(options.split())
+
+    click.secho(f"Processing {len(files)} file(s)", bg="red")
+
+    # Prepare file processing tasks
+    file_tasks = [
+        (id, pdf_file, command_parts, prefix, suffix, keep_smaller, force)
+        for id, pdf_file in enumerate(files)
+    ]
+
+    tic = time.time()
+    try:
+        with multiprocessing.Pool(initializer=init_worker) as pool:
+            results = pool.map(process_file, file_tasks)
+    except KeyboardInterrupt:
+        click.echo("\nProcess interrupted. Terminating pool...")
+        pool.terminate()
+        pool.join()
+        sys.exit(1)
+    toc = time.time()
+
+    # Print summary table
+    column_width = 10
+    click.secho(
+        f"\n{'Original':^{column_width}} | {'New':^{column_width}} | {'Ratio':^{column_width}} | {'Keeping':^{column_width}} | Filename",
+        bold=True,
+    )
+    for r in results:
+        click.echo(
+            f"{human_readable_size(r['original_size']):>{column_width}} | {human_readable_size(r['new_size']):>{column_width}} | {r['ratio']:{column_width}.3%} | {r['keeping']:^{column_width}} | {r['filename']}"
+        )
+
+    click.echo(f"\nTotal time: {toc - tic:.2f} seconds")
+
+    if open_path:
+        time.sleep(0.5)
+        show_in_file_manager([r["filename"] for r in results])
+
+
 def init_worker() -> None:
     """Ignore keyboard interrupts in worker processes so that only the main process handles them."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -176,134 +316,6 @@ def move_output(
         "keeping": keeping,
         "filename": os.path.abspath(output_file),
     }
-
-
-@click.command(no_args_is_help=True)
-@click.option(
-    "--options", default=None, help="Arbitrary Ghostscript options and switches."
-)
-@click.option(
-    "--compress",
-    default=None,
-    is_flag=False,
-    flag_value="/ebook",
-    help="Compression quality level (e.g., /screen, /ebook, /printer, /prepress).",
-)
-@click.option(
-    "--pdfa",
-    is_flag=False,
-    flag_value=2,
-    default=None,
-    help="PDF/A version (e.g., 1 for PDF/A-1, 2 for PDF/A-2, 3 for PDF/A-3).",
-)
-@click.option(
-    "--prefix",
-    default="",
-    help="Prefix to add to the output file name. Can be path-like (e.g., 'pdfs/').\n NOTE: relative path are calculated relative to pdf file position, not the current working directory.",
-)
-@click.option(
-    "--suffix",
-    default="",
-    help="Suffix to add to the output file name before the extension.",
-)
-@click.option(
-    "--keep_smaller/--keep_new",
-    default=True,
-    help="Keep the smaller file between old and new (default: keep smaller).",
-)
-@click.option(
-    "--force",
-    "-f",
-    is_flag=True,
-    default=False,
-    help="Allow overwriting the original file.",
-)
-@click.argument("files", nargs=-1, type=click.Path(exists=True))
-def gs_batch(
-    options: str,
-    prefix: str,
-    suffix: str,
-    compress: str,
-    pdfa: int,
-    files: Tuple[str],
-    keep_smaller: bool,
-    force: bool,
-) -> None:
-    """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
-
-    # overwriting alert
-    if not prefix and not force:
-        click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
-        click.secho(
-            "Original files may be overwritten if no `--prefix` is specified",
-            bold=True,
-            fg="red",
-        )
-        click.secho(
-            "(Use the `--force` flag to allow overwriting original files and skip this messages)",
-            fg="black",
-        )
-        response = click.prompt(
-            "Do you want to overwrite original files?",
-            default="n",
-            type=click.Choice(["y", "n"]),
-        )
-        if response == "y":
-            force = True
-        else:
-            click.echo("Aborting...")
-            return
-
-    # Command building logic
-    command_parts = []
-    if compress:
-        command_parts.append(f"-dPDFSETTINGS={compress}")
-    if pdfa:
-        command_parts.extend(
-            [
-                "-dPDFACompatibilityPolicy=1",
-                "-sColorConversionStrategy=RGB",
-                f"-dPDFA={pdfa}",
-            ]
-        )
-        keep_smaller = False
-    if options:
-        command_parts.append(options)
-
-    click.secho(f"Processing {len(files)} file(s)", bg="red")
-
-    # Prepare file processing tasks
-    file_tasks = [
-        (id, pdf_file, command_parts, prefix, suffix, keep_smaller, force)
-        for id, pdf_file in enumerate(files)
-    ]
-
-    tic = time.time()
-    try:
-        with multiprocessing.Pool(initializer=init_worker) as pool:
-            results = pool.map(process_file, file_tasks)
-    except KeyboardInterrupt:
-        click.echo("\nProcess interrupted. Terminating pool...")
-        pool.terminate()
-        pool.join()
-        sys.exit(1)
-    toc = time.time()
-
-    # Print summary table
-    column_width = 10
-    click.secho(
-        f"\n{'Original':^{column_width}} | {'New':^{column_width}} | {'Ratio':^{column_width}} | {'Keeping':^{column_width}} | Filename",
-        bold=True,
-    )
-    for r in results:
-        click.echo(
-            f"{human_readable_size(r['original_size']):>{column_width}} | {human_readable_size(r['new_size']):>{column_width}} | {r['ratio']:{column_width}.3%} | {r['keeping']:^{column_width}} | {r['filename']}"
-        )
-
-    click.echo(f"\nTotal time: {toc - tic:.2f} seconds")
-
-    time.sleep(0.5)
-    show_in_file_manager([r["filename"] for r in results])
 
 
 if __name__ == "__main__":
