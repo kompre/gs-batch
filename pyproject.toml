@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gs-batch-pdf"
-version = "0.3.1b2"
+version = "0.4.0"
 description = "cli tool wrapper for manipulating multiple pdfs file in parallel using ghostscript (compressing, convert to pdfa, etc.)"
 authors = ["kompre <s.follador@gmail.com>"]
 readme = "README.md"
