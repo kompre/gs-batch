@@ -40,7 +40,7 @@ import time
 @click.option(
     "--prefix",
     default="",
-    help="Prefix to add to the output file name. Can be path-like (e.g., 'pdfs/').\n NOTE: relative path are calculated relative to input pdf file position, not the current working directory.",
+    help="Prefix to add to the output file name. Can be path-like (e.g., 'pdfs/'). NOTE: relative path are calculated relative to input pdf file position, not the current working directory.",
 )
 @click.option(
     "--suffix",
@@ -50,7 +50,8 @@ import time
 @click.option(
     "--keep_smaller/--keep_new",
     default=True,
-    help="Keep the smaller file between old and new (default: keep smaller).",
+    show_default=True,
+    help="Keep the smaller file between old and new.",
 )
 @click.option(
     "--force",
@@ -64,6 +65,12 @@ import time
     default=True,
     help="Open the output file path in the filesystem.",
 )
+@click.option(
+    "--filter",
+    default="pdf",
+    show_default=True,
+    help="Filter input files by extension; could be comma-separated. (e.g., 'pdf,png')",
+)
 @click.argument("files", nargs=-1, type=click.Path(exists=True))
 def gs_batch(
     options: str,
@@ -75,6 +82,7 @@ def gs_batch(
     keep_smaller: bool,
     force: bool,
     open_path: bool,
+    filter: str,
 ) -> None:
     """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
 
@@ -82,7 +90,7 @@ def gs_batch(
     if not prefix and not force:
         click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
         click.secho(
-            "Original files may be overwritten if no `--prefix` is specified",
+            " Original files may be overwritten if no `--prefix` is specified",
             bold=True,
             fg="red",
         )
@@ -116,6 +124,11 @@ def gs_batch(
         keep_smaller = False
     if options:
         command_parts.extend(options.split())
+
+    # filter input files
+    files = [
+        f for f in files if os.path.splitext(f)[1].lower() for ext in filter.split(",")
+    ]
 
     click.secho(f"Processing {len(files)} file(s)", bg="red")
 
@@ -161,11 +174,7 @@ def init_worker() -> None:
 
 def human_readable_size(size_in_bytes: int) -> str:
     """Convert file size from bytes to a human-readable format (KB or MB)."""
-    return (
-        f"{size_in_bytes / 1024:,.0f} KB"
-        if size_in_bytes < 1024 * 1024
-        else f"{size_in_bytes / (1024 * 1024):,.2f} MB"
-    )
+    return f"{size_in_bytes / 1024:,.0f} KB"
 
 
 def get_ghostscript_command() -> str:

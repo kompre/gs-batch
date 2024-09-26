@@ -44,38 +44,47 @@ gs-batch-pdf [OPTIONS] FILES...
 Options:
 
 - `--options TEXT`: Arbitrary Ghostscript options and switches.
-- `--compress TEXT`: Compression quality level (e.g., /screen, /ebook, /printer, /prepress) (default: /ebook).
-- `--pdfa INTEGER`: PDF/A version (1 for PDF/A-1, 2 for PDF/A-2, 3 for PDF/A-3; default: 2).
+- `--compress TEXT`: Compression quality level (e.g., /screen, [/ebook], /printer, /prepress, /default).
+- `--pdfa INTEGER`: PDF/A version (1 for PDF/A-1, 2 for [PDF/A-2], 3 for PDF/A-3).
 - `--prefix TEXT`: Prefix to add to the output file name.
 - `--suffix TEXT`: Suffix to add to the output file name before the extension.
-- `--keep_smaller / --keep_new`: Keep the smaller file between old and new (default: keep smaller).
+- `--keep_smaller / --keep_new`: Keep the smaller file between old and new [default: keep_smaller].
 - `--force`: Allow overwriting the original file.
+- `--open_path / --no_open_path`: Open the output file path in the filesystem.
+- `--filter TEXT`: Filter input files by extension; could be comma-separated. (e.g., 'pdf,png')  [default: pdf]
+- `--help`: Show this message and exit.
 
 ## Examples
 
-1. Compress multiple PDF files using ebook quality:
+1. Compress multiple PDF files using ebook quality *in place* (overwrite)[^3]:
+
+[^3]: When no `--prefix` is provided if `--force` has not being raised, you will be prompt for permission to overwrite the original files.
 
 ```
 gs_batch --compress=/ebook file1.pdf file2.pdf file3.pdf
 ```
 
-2. Convert PDFs to PDF/A-2 format:
+
+1. Convert PDFs to PDF/A-2 format *in place* (overwrite):
 
 ```
 gs_batch --pdfa=2 file1.pdf file2.pdf
 ```
 
-3. Compress and Convert PDFs to PDF/A-2 format all pdfs in a folder:
+3. Compress and Convert PDFs to PDF/A-2 format all pdfs in a folder with glob patterns (by default will filter the file list by the pdf extension):
 
 ```
-# you can use glob patterns
-gs_batch --compress --pdfa=2 *.pdf 
+# will find all pdfs in the current folder
+gs_batch --compress --pdfa --force *  
+
+# will find alls pdfs in folder and subfolder recursively
+gs_batch --compress --pdfa --force **/* 
 ```
 
 4. Apply custom Ghostscript options:
 
 ```
-gs_batch --options="-dPDFSETTINGS=/screen -dColorImageResolution=72" file.pdf
+gs_batch --options="-dCompatibilityLevel=1.4 -dColorImageResolution=72" file.pdf
 ```
 
 4. Add prefix^[you can also specify new folder] and suffix to output files:
