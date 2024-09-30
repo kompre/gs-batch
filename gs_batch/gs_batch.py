@@ -10,7 +10,7 @@ from tqdm import tqdm
 import signal
 import sys
 from typing import Dict, Tuple
-from showinfm import show_in_file_manager
+from showinfm import show_in_file_manager, stock_file_manager
 import time
 
 
@@ -127,16 +127,28 @@ def gs_batch(
 
     # filter input files
     files = [
-        f for f in files if os.path.splitext(f)[1].lower() for ext in filter.split(",")
+        f
+        for f in files
+        if os.path.splitext(f)[1].replace(".", "").lower() in filter.split(",")
     ]
 
-    click.secho(f"Processing {len(files)} file(s)", bg="red")
+    # print input files
+    id_width = len(
+        str(len(files))
+    )  # determine the width of the id column as number of digit in len(files)
+
+    click.secho(f"Processing {len(files)} file(s):", bg="red")
 
     # Prepare file processing tasks
     file_tasks = [
         (id, pdf_file, command_parts, prefix, suffix, keep_smaller, force)
         for id, pdf_file in enumerate(files)
     ]
+
+    for file in file_tasks:
+        click.echo(
+            f"{file[0]:>{2+id_width}d}) {file[1]}"
+        )  # right align the id and indent b y 2 spaces
 
     tic = time.time()
     try:
@@ -151,20 +163,26 @@ def gs_batch(
 
     # Print summary table
     column_width = 10
+
     click.secho(
-        f"\n{'Original':^{column_width}} | {'New':^{column_width}} | {'Ratio':^{column_width}} | {'Keeping':^{column_width}} | Filename",
+        f"\n {'#':>{id_width}s} | {'Original':^{column_width}} | {'New':^{column_width}} | {'Ratio':^{column_width}} | {'Keeping':^{column_width}} | Filename",
         bold=True,
     )
     for r in results:
         click.echo(
-            f"{human_readable_size(r['original_size']):>{column_width}} | {human_readable_size(r['new_size']):>{column_width}} | {r['ratio']:{column_width}.3%} | {r['keeping']:^{column_width}} | {r['filename']}"
+            f" {r['id']:>{id_width}d} | {human_readable_size(r['original_size']):>{column_width}} | {human_readable_size(r['new_size']):>{column_width}} | {r['ratio']:{column_width}.3%} | {r['keeping']:^{column_width}} | {r['filename']}"
         )
 
     click.echo(f"\nTotal time: {toc - tic:.2f} seconds")
 
+    # open files folder and select them
     if open_path:
         time.sleep(0.5)
-        show_in_file_manager([r["filename"] for r in results])
+        show_in_file_manager(
+            [r["filename"] for r in results]
+            if stock_file_manager() != "nautilus"
+            else results[0]["filename"]
+        )
 
 
 def init_worker() -> None:
@@ -261,7 +279,7 @@ def process_file(file_info: Tuple[str, list, str, str, bool, bool]) -> Dict[str,
 
     # Move or rename the output file
     result = move_output(
-        temp_output_file, pdf_file, prefix, suffix, keep_smaller, force
+        temp_output_file, pdf_file, prefix, suffix, keep_smaller, force, id
     )
 
     return result
@@ -274,6 +292,7 @@ def move_output(
     suffix: str,
     keep_smaller: bool,
     force: bool,
+    id: int,
 ) -> Dict[str, str]:
     """Rename or move the output file, keeping either the original or new file based on size comparison."""
     root, _ = os.path.split(original_file)
@@ -324,6 +343,7 @@ def move_output(
         "ratio": ratio,
         "keeping": keeping,
         "filename": os.path.abspath(output_file),
+        "id": id,
     }
 
 
