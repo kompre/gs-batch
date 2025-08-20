@@ -12,7 +12,9 @@ import sys
 from typing import Dict, Tuple
 from showinfm import show_in_file_manager, stock_file_manager
 import time
+from .get_encoder import default_encoding
 
+click.echo(default_encoding)
 
 @click.command(no_args_is_help=True)
 @click.option(
@@ -312,6 +314,7 @@ def process_file(file_info: list[int, str, list, list, str, str, bool, bool, boo
     gs_command.extend(first_argument)
     gs_command.append(pdf_file)
 
+    click.echo('areo')
     # Run the Ghostscript command
     status = run_ghostscript(id, verbose, gs_command)
 

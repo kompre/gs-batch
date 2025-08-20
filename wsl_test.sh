@@ -1,0 +1,1 @@
+gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dNOPAUSE -dQUIET -dBATCH -sOutputFile=wsl/output.pdf ./tests/assets/originals/file_0.pdf
