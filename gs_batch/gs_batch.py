@@ -9,7 +9,7 @@ import click.testing
 from tqdm import tqdm
 import signal
 import sys
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from showinfm import show_in_file_manager, stock_file_manager
 import time
 
@@ -77,6 +77,12 @@ import time
     default=False,
     help="Show verbose output.",
 )
+@click.option(
+    "--recursive", "-r",
+    is_flag=True,
+    default=False,
+    help="Recursively search directories for files matching --filter extension(s).",
+)
 @click.argument("files", nargs=-1, type=str)
 def gs_batch(
     options: str,
@@ -90,6 +96,7 @@ def gs_batch(
     open_path: bool,
     filter: str,
     verbose: bool,
+    recursive: bool,
 ) -> None:
     """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
 
@@ -100,14 +107,12 @@ def gs_batch(
             click.secho(f"Error: Path does not exist: {path}", fg="red", err=True)
         sys.exit(1)
 
-    # Filter input files first to check if there are any matching files
+    # Parse filter extensions
     filter_extensions = [ext.lower() for ext in filter.split(",")]
     original_count = len(files)
-    files = [
-        f
-        for f in files
-        if os.path.splitext(f)[1].replace(".", "").lower() in filter_extensions
-    ]
+
+    # Find files (with optional recursion)
+    files = find_files_recursive(files, filter_extensions, recursive)
 
     # Early exit if no files match
     if not files:
@@ -232,6 +237,60 @@ def init_worker() -> None:
 def human_readable_size(size_in_bytes: int) -> str:
     """Convert file size from bytes to a human-readable format (KB or MB)."""
     return f"{size_in_bytes / 1024:,.0f} KB"
+
+
+def find_files_recursive(
+    paths: Tuple[str],
+    filter_extensions: List[str],
+    recursive: bool
+) -> List[str]:
+    """Find all files matching filter, optionally searching recursively.
+
+    Args:
+        paths: File or directory paths to search.
+        filter_extensions: List of extensions to include (e.g., ['pdf', 'png']).
+        recursive: If True, search directories recursively.
+
+    Returns:
+        List of file paths matching the filter.
+    """
+    found_files = []
+
+    for path in paths:
+        if os.path.isfile(path):
+            # Direct file argument - include if matches filter
+            ext = os.path.splitext(path)[1].replace(".", "").lower()
+            if ext in filter_extensions:
+                found_files.append(path)
+
+        elif os.path.isdir(path):
+            if recursive:
+                # Recursive directory search (followlinks=True per user decision)
+                try:
+                    for root, dirs, files in os.walk(path, followlinks=True):
+                        for file in files:
+                            ext = os.path.splitext(file)[1].replace(".", "").lower()
+                            if ext in filter_extensions:
+                                found_files.append(os.path.join(root, file))
+                except PermissionError:
+                    # Warn about inaccessible directories per user decision
+                    click.secho(f"Warning: Permission denied: {path}", fg="yellow", err=True)
+            else:
+                # Non-recursive: only direct children
+                try:
+                    for item in os.listdir(path):
+                        item_path = os.path.join(path, item)
+                        if os.path.isfile(item_path):
+                            ext = os.path.splitext(item)[1].replace(".", "").lower()
+                            if ext in filter_extensions:
+                                found_files.append(item_path)
+                except PermissionError:
+                    click.secho(f"Warning: Permission denied: {path}", fg="yellow", err=True)
+        else:
+            # Path doesn't exist (shouldn't happen due to earlier validation)
+            click.secho(f"Warning: Skipping invalid path: {path}", fg="yellow", err=True)
+
+    return found_files
 
 
 def get_ghostscript_command() -> str:

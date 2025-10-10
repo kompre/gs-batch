@@ -237,3 +237,112 @@ def test_empty_file_list_verbose(setup_test_files):
     assert result.exit_code == 0
     assert "No files found" in result.output
     assert "Searched 1 path(s), found 0 matching files" in result.output
+
+
+def test_recursive_search_nested_directories(setup_test_files):
+    """Test recursive search finds files in nested directories."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Create nested directory structure with PDFs
+    nested_dir = os.path.join(temp_dir, "subdir1", "subdir2")
+    os.makedirs(nested_dir, exist_ok=True)
+
+    # Copy a test file to nested location
+    originals_dir = "tests/assets/originals"
+    shutil.copy(
+        os.path.join(originals_dir, "file_1.pdf"),
+        os.path.join(nested_dir, "nested_file.pdf")
+    )
+
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Run with recursive flag
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress=/screen",
+            f"--prefix={output_dir}/",
+            "--recursive",
+            "--no_open_path",
+            temp_dir,
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should find all PDFs: 3 in root + 1 in nested dir = 4 files
+    assert "Processing 4 file(s)" in result.output
+
+
+def test_non_recursive_directory_search(setup_test_files):
+    """Test non-recursive search only finds files in top level."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Create nested directory with PDF
+    nested_dir = os.path.join(temp_dir, "subdir")
+    os.makedirs(nested_dir, exist_ok=True)
+
+    originals_dir = "tests/assets/originals"
+    shutil.copy(
+        os.path.join(originals_dir, "file_1.pdf"),
+        os.path.join(nested_dir, "nested_file.pdf")
+    )
+
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Run WITHOUT recursive flag
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress=/screen",
+            f"--prefix={output_dir}/",
+            "--no_open_path",
+            temp_dir,
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should only find 3 PDFs in root (not the nested one)
+    assert "Processing 3 file(s)" in result.output
+
+
+def test_mixed_file_and_directory_arguments(setup_test_files):
+    """Test mixing direct file paths and directories with recursion."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Create a subdirectory with a PDF
+    subdir = os.path.join(temp_dir, "subdir")
+    os.makedirs(subdir, exist_ok=True)
+
+    originals_dir = "tests/assets/originals"
+    shutil.copy(
+        os.path.join(originals_dir, "file_2.pdf"),
+        os.path.join(subdir, "sub_file.pdf")
+    )
+
+    # Direct file path
+    direct_file = os.path.join(temp_dir, "file_1.pdf")
+
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Run with both a direct file and a directory
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress=/screen",
+            f"--prefix={output_dir}/",
+            "--recursive",
+            "--no_open_path",
+            direct_file,
+            subdir,
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should find 1 direct file + 1 in subdir = 2 files
+    assert "Processing 2 file(s)" in result.output
