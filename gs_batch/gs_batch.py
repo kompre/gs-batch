@@ -77,7 +77,7 @@ import time
     default=False,
     help="Show verbose output.",
 )
-@click.argument("files", nargs=-1, type=click.Path(exists=True))
+@click.argument("files", nargs=-1, type=str)
 def gs_batch(
     options: str,
     prefix: str,
@@ -92,6 +92,30 @@ def gs_batch(
     verbose: bool,
 ) -> None:
     """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
+
+    # Validate that paths exist
+    invalid_paths = [f for f in files if not os.path.exists(f)]
+    if invalid_paths:
+        for path in invalid_paths:
+            click.secho(f"Error: Path does not exist: {path}", fg="red", err=True)
+        sys.exit(1)
+
+    # Filter input files first to check if there are any matching files
+    filter_extensions = [ext.lower() for ext in filter.split(",")]
+    original_count = len(files)
+    files = [
+        f
+        for f in files
+        if os.path.splitext(f)[1].replace(".", "").lower() in filter_extensions
+    ]
+
+    # Early exit if no files match
+    if not files:
+        click.secho("No files found matching the specified filter.", fg="yellow", err=True)
+        click.echo(f"Filter: {filter}", err=True)
+        if verbose:
+            click.echo(f"Searched {original_count} path(s), found 0 matching files.", err=True)
+        return
 
     # overwriting alert
     if not prefix and not force:
@@ -131,7 +155,7 @@ def gs_batch(
             ]
         )
         first_argument = [
-            '-c', 
+            '-c',
             f"/ICCProfile ({get_asset_path('srgb.icc')}) def" ,
             "-f",
             get_asset_path("PDFA_def.ps"),
@@ -139,13 +163,6 @@ def gs_batch(
         keep_smaller = False
     if options:
         command_parts.extend(options.split())
-
-    # filter input files
-    files = [
-        f
-        for f in files
-        if os.path.splitext(f)[1].replace(".", "").lower() in filter.split(",")
-    ]
 
     # print input files
     id_width = len(

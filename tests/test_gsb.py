@@ -189,3 +189,51 @@ def test_keep_new_when_larger(setup_test_files):
     assert os.path.exists(test_file)
     new_size = os.path.getsize(output_file)
     assert new_size >= os.path.getsize(test_file)
+
+
+def test_no_files_match_filter(setup_test_files):
+    """Test graceful exit when no files match the filter."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    test_file = os.path.join(temp_dir, "file_1.pdf")
+
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress=/screen",
+            "--filter=png",  # No PNG files exist
+            "--no_open_path",
+            test_file,
+        ],
+    )
+
+    # Should exit successfully (code 0)
+    assert result.exit_code == 0
+    assert "No files found" in result.output
+    assert "Filter: png" in result.output
+    # Should not show "Processing X file(s)"
+    assert "Processing 0 file(s)" not in result.output
+
+
+def test_empty_file_list_verbose(setup_test_files):
+    """Test verbose output when no files match."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    test_file = os.path.join(temp_dir, "file_1.pdf")
+
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress=/screen",
+            "--filter=docx",
+            "--verbose",
+            "--no_open_path",
+            test_file,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "No files found" in result.output
+    assert "Searched 1 path(s), found 0 matching files" in result.output
