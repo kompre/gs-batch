@@ -9,7 +9,7 @@ import click.testing
 from tqdm import tqdm
 import signal
 import sys
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional, Any, Union
 from showinfm import show_in_file_manager, stock_file_manager
 import time
 
@@ -90,7 +90,7 @@ def gs_batch(
     suffix: str,
     compress: str,
     pdfa: int,
-    files: Tuple[str],
+    files: Union[Tuple[str, ...], List[str]],
     keep_smaller: bool,
     force: bool,
     open_path: bool,
@@ -98,7 +98,55 @@ def gs_batch(
     verbose: bool,
     recursive: bool,
 ) -> None:
-    """CLI tool to batch process PDFs with Ghostscript for compression or PDF/A conversion."""
+    """Batch process PDF files with Ghostscript for compression or PDF/A conversion.
+
+    A command-line tool that processes multiple PDF files in parallel using
+    Ghostscript. Supports compression, PDF/A conversion, and custom Ghostscript
+    options. Processes files using multiprocessing for improved performance and
+    displays progress bars for each file.
+
+    Args:
+        options: Arbitrary Ghostscript options and switches as a string.
+                 Example: '-dColorImageResolution=100 -dCompatibilityLevel=1.4'
+        prefix: Prefix to add to output filename. Can include directory path.
+                Relative paths are calculated from input file location, not CWD.
+        suffix: Suffix to add to output filename before the extension.
+        compress: Compression quality level. One of: /screen, /ebook, /printer,
+                  /prepress, /default. Default /ebook if flag used without value.
+        pdfa: PDF/A version for conversion. One of: 1 (PDF/A-1), 2 (PDF/A-2),
+              3 (PDF/A-3). Default 2 if flag used without value.
+        files: Tuple of file or directory paths to process.
+        keep_smaller: If True, keep smaller file between original and processed.
+                      If False, always keep the processed file. Overridden to
+                      False when using PDF/A conversion.
+        force: If True, allow overwriting original files without confirmation.
+               Otherwise, prompts user if no prefix is specified.
+        open_path: If True, open output location in file manager after processing.
+        filter: Comma-separated file extensions to include. Default: "pdf".
+                Example: "pdf,png" to process both PDFs and PNGs.
+        verbose: If True, display detailed command output and progress information.
+        recursive: If True, recursively search directories for files matching filter.
+                   If False, only process files in the top level of directories.
+
+    Returns:
+        None. Prints summary table and processing results to stdout.
+
+    Side Effects:
+        - Creates/overwrites files in filesystem
+        - May prompt user for overwrite confirmation
+        - Opens file manager if open_path=True
+        - Exits with code 1 if invalid paths provided
+        - Prints progress bars and summary to stdout
+
+    Example:
+        >>> # Compress all PDFs in current directory
+        >>> gs_batch(None, "compressed_", "", "/ebook", None, tuple(["./"]),
+        ...          True, False, False, "pdf", False, True)
+
+        >>> # Convert to PDF/A-2 with custom prefix
+        >>> gs_batch(None, "archive/", "_pdfa", None, "2", tuple(["input.pdf"]),
+        ...          False, True, True, "pdf", True, False)
+    """
 
     # Validate that paths exist
     invalid_paths = [f for f in files if not os.path.exists(f)]
@@ -240,7 +288,7 @@ def human_readable_size(size_in_bytes: int) -> str:
 
 
 def find_files_recursive(
-    paths: Tuple[str],
+    paths: Union[Tuple[str, ...], List[str]],
     filter_extensions: List[str],
     recursive: bool
 ) -> List[str]:
@@ -317,16 +365,61 @@ def get_ghostscript_command() -> str:
 
 
 def get_total_page_count(p: subprocess.CompletedProcess) -> int:
-    """Extract the total number of pages from the Ghostscript output."""
-    return  int(
-            p.stdout.split(" ")[-1].replace(".", "")
-        )
+    """Extract the total number of pages from Ghostscript PDF info output.
 
-def run_ghostscript(id: int, verbose: bool, args: list) -> None:
-    """Run the Ghostscript command and track progress using tqdm."""
+    Parses the last token from Ghostscript's -dPDFINFO output which contains
+    the page count.
+
+    Args:
+        p: Completed subprocess result from Ghostscript with -dPDFINFO flag.
+
+    Returns:
+        Total number of pages in the PDF file.
+
+    Raises:
+        ValueError: If the output cannot be parsed as an integer.
+
+    Example:
+        >>> result = subprocess.run(["gs", "-dPDFINFO", "-dBATCH", "-dNODISPLAY", "file.pdf"],
+        ...                         capture_output=True, text=True)
+        >>> pages = get_total_page_count(result)
+        >>> print(pages)
+        10
+    """
+    return int(
+        p.stdout.split(" ")[-1].replace(".", "")
+    )
+
+def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
+    """Run Ghostscript command with progress tracking.
+
+    Executes Ghostscript on a PDF file while displaying a progress bar that
+    tracks page processing. The function first determines the total page count,
+    then runs the main Ghostscript command and updates progress as each page
+    is processed.
+
+    Args:
+        id: Task identifier for progress bar positioning in multiprocessing.
+        verbose: If True, prints the full Ghostscript command before execution.
+        args: Ghostscript command arguments including output file and input PDF.
+              The last argument must be the input PDF path.
+
+    Returns:
+        True if Ghostscript executed successfully, None if an error occurred.
+
+    Raises:
+        subprocess.CalledProcessError: If Ghostscript command fails.
+        ValueError: If PDF page count cannot be determined.
+
+    Example:
+        >>> args = ["-sDEVICE=pdfwrite", "-o", "output.pdf", "input.pdf"]
+        >>> success = run_ghostscript(0, True, args)
+        >>> if success:
+        ...     print("Processing completed")
+    """
     gs_command = get_ghostscript_command()
     full_command = [gs_command] + args
-    
+
     if verbose:
         click.echo(f"Running command: {' '.join(full_command)}")
 
@@ -340,20 +433,24 @@ def run_ghostscript(id: int, verbose: bool, args: list) -> None:
         total_length = get_total_page_count(result)
     except subprocess.CalledProcessError as e:
         click.echo(f"Error executing Ghostscript: {e}")
-        return
+        return None
     except ValueError as e:
         click.secho(f'ValueError: {e}', fg='red')
         click.secho(f'Cannot determine total number of pages. Possibly "{args[-1]}" is broken? (e.g. size 0kB)', fg='red')
-        return
+        return None
     except Exception as e:
         click.secho(f'Unexpected error: {e}', fg='red')
-        return
-        
+        return None
+
 
     try:
         process = subprocess.Popen(
             full_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
+        if process.stdout is None:
+            click.echo("Error: Failed to capture Ghostscript output")
+            return None
+
         with tqdm(
             total=total_length,
             desc=f"{id+1}) {args[-1]}",
@@ -361,21 +458,54 @@ def run_ghostscript(id: int, verbose: bool, args: list) -> None:
             leave=False,
             colour="green",
         ) as bar:
-            for line in iter(process.stdout.readline, b""):
-                line = line.decode("utf-8", errors="ignore")
+            for line_bytes in iter(process.stdout.readline, b""):
+                line = line_bytes.decode("utf-8", errors="ignore")
                 if line.startswith("Page "):
                     bar.update(1)
 
     except subprocess.CalledProcessError as e:
         click.echo(f"Error executing Ghostscript: {e}")
-        return
-    
+        return None
+
     # return a status value if the gs command was successful
     return True 
     
 
-def process_file(file_info: list[int, str, list, list, str, str, bool, bool, bool]) -> Dict[str, str]:
-    """Process a single PDF file with Ghostscript and move/rename the output based on size."""
+def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool, bool, bool]) -> Dict[str, Any]:
+    """Process a single PDF file with Ghostscript.
+
+    Processes a PDF file using Ghostscript with specified compression or PDF/A
+    conversion settings, then moves/renames the output based on size comparison.
+
+    Args:
+        file_info: Tuple containing (id, pdf_file, command_parts, first_argument,
+                   prefix, suffix, keep_smaller, force, verbose) where:
+                   - id: Task identifier for progress tracking
+                   - pdf_file: Path to input PDF file
+                   - command_parts: Ghostscript command arguments
+                   - first_argument: Additional command prefix arguments
+                   - prefix: Output filename prefix
+                   - suffix: Output filename suffix
+                   - keep_smaller: If True, keep smaller file; if False, keep new file
+                   - force: If True, allow overwriting original files
+                   - verbose: If True, show detailed command output
+
+    Returns:
+        Dictionary containing processing results with keys:
+        - 'id': Task identifier
+        - 'filename': Absolute path to output file
+        - 'original_size': Size of original file in bytes
+        - 'new_size': Size of processed file in bytes (if successful)
+        - 'ratio': Compression ratio as float (if successful)
+        - 'keeping': "original" or "new" indicating which file was kept
+        - 'message': Error message (if processing failed)
+
+    Example:
+        >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False)
+        >>> result = process_file(task)
+        >>> print(result['keeping'])
+        new
+    """
     id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose = file_info
 
     # Create a temporary output file
@@ -402,7 +532,7 @@ def process_file(file_info: list[int, str, list, list, str, str, bool, bool, boo
 
 
 def move_output(
-    status: bool,
+    status: Optional[bool],
     temp_file: str,
     original_file: str,
     prefix: str,
@@ -410,14 +540,39 @@ def move_output(
     keep_smaller: bool,
     force: bool,
     id: int,
-) -> Dict[str, str]:
-    
+) -> Dict[str, Any]:
+    """Move or rename processed PDF based on size comparison.
+
+    Handles output file placement after Ghostscript processing, deciding whether
+    to keep the original or processed file based on size comparison and user
+    preferences. Manages file overwrites and directory creation.
+
+    Args:
+        status: Ghostscript execution result (True=success, None=failure).
+        temp_file: Path to temporary processed PDF file.
+        original_file: Path to original input PDF file.
+        prefix: Prefix to add to output filename (can include directory path).
+        suffix: Suffix to add to output filename before extension.
+        keep_smaller: If True, keep whichever file is smaller; if False, always keep processed file.
+        force: If True, allow overwriting files without prompt.
+        id: Task identifier for result tracking.
+
+    Returns:
+        Dictionary with processing results:
+        - If successful: 'id', 'filename', 'original_size', 'new_size', 'ratio', 'keeping'
+        - If failed: 'id', 'filename', 'original_size', 'message'
+
+    Example:
+        >>> result = move_output(True, "/tmp/output.pdf", "input.pdf", "compressed_", "", True, False, 0)
+        >>> print(result['keeping'])
+        new
+    """
+
     # Get sizes of original and temporary files
     original_size = os.path.getsize(original_file)
-    
+
     # check if the file was successfully created
-    if status:    
-        """Rename or move the output file, keeping either the original or new file based on size comparison."""
+    if status:
         root, _ = os.path.split(original_file)
         input_basename, input_ext = os.path.splitext(os.path.basename(original_file))
 
