@@ -1,41 +1,55 @@
-[tool.poetry]
+[project]
 name = "gs-batch-pdf"
 version = "0.5.5"
 description = "cli tool wrapper for manipulating multiple pdfs file in parallel using ghostscript (compressing, convert to pdfa, etc.)"
-authors = ["kompre <s.follador@gmail.com>"]
+authors = [{ name = "kompre", email = "s.follador@gmail.com" }]
+requires-python = ">=3.12"
 readme = "README.md"
 license = "MIT"
-packages = [
-    { include = "gs_batch" },
-]
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-include = [
-    "gs_batch/assets/*"
+dependencies = [
+    "click>=8.1.7,<9",
+    "tqdm>=4.66.5,<5",
+    "show-in-file-manager>=1.1.5,<2",
 ]
 
-
-[tool.poetry.urls]
+[project.urls]
 Homepage = "https://github.com/kompre/gs-batch"
 Issue = "https://github.com/kompre/gs-batch/issues"
 
-[tool.poetry.dependencies]
-python = "^3.12"
-click = "^8.1.7"
-tqdm = "^4.66.5"
-show-in-file-manager = "^1.1.5"
-
-
-[tool.poetry.group.dev.dependencies]
-ipykernel = "^6.29.5"
-pytest = "^8.3.3"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
+[project.scripts]
 gs_batch = "gs_batch.gs_batch:gs_batch"
 gsb = "gs_batch.gs_batch:gs_batch"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5,<7",
+    "mypy>=1.18.2",
+    "pytest>=8.3.3,<9",
+    "types-tqdm>=4.67.0.20250809",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "gs_batch",
+    "gs_batch/assets/*",
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "gs_batch",
+    "gs_batch/assets/*",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true

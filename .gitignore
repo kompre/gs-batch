@@ -1,3 +1,21 @@
 */__pycache__/*
 tests/asset
-*/.vscode/*
+
+# Poetry
+poetry.lock
+
+# Virtual environments
+.venv/
+venv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# pytest
+.pytest_cache/

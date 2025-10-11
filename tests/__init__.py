@@ -1,25 +1,25 @@
-from gs_batch.gs_batch import gs_batch as gsb
+# from gs_batch.gs_batch import gs_batch as gsb
 
-from click.testing import CliRunner
+# from click.testing import CliRunner
 
-import glob
+# import glob
 
-files = glob.glob("tests/assets/originals/*.pdf")
+# files = glob.glob("tests/assets/originals/*.pdf")
 
-runner = CliRunner()
-result = runner.invoke(
-    gsb,
-    [
-        "--compress=/ebook",
-        "--prefix=../output/compressed_",
-        "--pdfa=2",
-        # "-v"
-    ] + files,
-)
-print(result.output)
+# runner = CliRunner()
+# result = runner.invoke(
+#     gsb,
+#     [
+#         "--compress=/ebook",
+#         "--prefix=../output/compressed_",
+#         "--pdfa=2",
+#         # "-v"
+#     ] + files,
+# )
+# print(result.output)
 
-import subprocess
-import time
+# import subprocess
+# import time
 
 # cmd = [
 #     "gswin64c",
