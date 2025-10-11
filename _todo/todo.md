@@ -4,16 +4,16 @@
 
 <!-- Add tasks here. When creating a proposal, move the task description to the proposal file -->
 
-### Improve documentation
-**Status:** Pull request created - awaiting merge
-**PR:** https://github.com/kompre/gs-batch/pull/4
-**Details:** `_todo/pending/improve-documentation.md`
-
 ### Test coverage
 **Status:** Proposal created - awaiting review
 **Proposal:** `_todo/proposal/add-tests.md`
 
 ## Completed Tasks
+
+### Improve documentation
+**Status:** ✅ Completed (2025-10-11)
+**PR:** https://github.com/kompre/gs-batch/pull/4
+**Details:** `_todo/completed/2025-10-11/improve-documentation.md`
 
 ### Feature: Handle no files found gracefully
 **Status:** ✅ Completed (2025-10-10)
