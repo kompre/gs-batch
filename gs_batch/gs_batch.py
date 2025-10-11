@@ -12,9 +12,40 @@ import sys
 from typing import Dict, Tuple, List, Optional, Any, Union
 from showinfm import show_in_file_manager, stock_file_manager
 import time
+from importlib.metadata import version, PackageNotFoundError
 
 
-@click.command(no_args_is_help=True)
+def get_version() -> str:
+    """Get package version from metadata."""
+    try:
+        return version("gs-batch-pdf")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def get_package_info() -> str:
+    """Get formatted package information for help display."""
+    from importlib.metadata import metadata
+    try:
+        meta = metadata("gs-batch-pdf")
+        pkg_version = meta.get("Version", "unknown")
+        author = meta.get("Author", "kompre")
+        return f"gs-batch-pdf v{pkg_version} | by {author}"
+    except PackageNotFoundError:
+        return "gs-batch-pdf"
+
+
+EPILOG = """
+Examples: gsb --compress . | gsb -r --compress ./docs/ | gsb --pdfa file.pdf
+"""
+
+
+@click.command(
+    no_args_is_help=True,
+    epilog=EPILOG,
+    help=f"{get_package_info()}\n\nBatch process PDF files using Ghostscript with parallel compression and format conversion."
+)
+@click.version_option(version=get_version(), prog_name="gs-batch-pdf")
 @click.option(
     "--options",
     default=None,
@@ -85,6 +116,27 @@ import time
 )
 @click.argument("files", nargs=-1, type=str)
 def gs_batch(
+    options: str,
+    prefix: str,
+    suffix: str,
+    compress: str,
+    pdfa: int,
+    files: Union[Tuple[str, ...], List[str]],
+    keep_smaller: bool,
+    force: bool,
+    open_path: bool,
+    filter: str,
+    verbose: bool,
+    recursive: bool,
+) -> None:
+    """CLI wrapper for gs_batch_impl - see help parameter in @click.command decorator."""
+    return _gs_batch_impl(
+        options, prefix, suffix, compress, pdfa, files,
+        keep_smaller, force, open_path, filter, verbose, recursive
+    )
+
+
+def _gs_batch_impl(
     options: str,
     prefix: str,
     suffix: str,
