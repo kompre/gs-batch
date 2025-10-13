@@ -59,7 +59,7 @@ def test_copy_default_behavior(setup_test_files):
         gsb,
         [
             "--compress=/ebook",
-            f"--prefix={output_dir}/compressed_",
+            f"--prefix={output_dir}{os.sep}compressed_",
             "--no_open_path",
             test_file,
         ],
@@ -129,7 +129,7 @@ def test_keep_originals_when_smaller(setup_test_files):
         gsb,
         [
             "--compress=/screen",
-            f"--prefix={output_dir}/compressed_",
+            f"--prefix={output_dir}{os.sep}compressed_",
             "--no_open_path",
             test_file,
         ],
@@ -172,7 +172,7 @@ def test_keep_new_when_larger(setup_test_files):
         gsb,
         [
             "--compress=/prepress",
-            f"--prefix={output_dir}/compressed_",
+            f"--prefix={output_dir}{os.sep}compressed_",
             "--pdfa=1",
             "--no_open_path",
             test_file,
@@ -263,7 +263,7 @@ def test_recursive_search_nested_directories(setup_test_files):
         gsb,
         [
             "--compress=/screen",
-            f"--prefix={output_dir}/",
+            f"--prefix={output_dir}{os.sep}",
             "--recursive",
             "--no_open_path",
             temp_dir,
@@ -298,7 +298,7 @@ def test_non_recursive_directory_search(setup_test_files):
         gsb,
         [
             "--compress=/screen",
-            f"--prefix={output_dir}/",
+            f"--prefix={output_dir}{os.sep}",
             "--no_open_path",
             temp_dir,
         ],
@@ -335,7 +335,7 @@ def test_mixed_file_and_directory_arguments(setup_test_files):
         gsb,
         [
             "--compress=/screen",
-            f"--prefix={output_dir}/",
+            f"--prefix={output_dir}{os.sep}",
             "--recursive",
             "--no_open_path",
             direct_file,
