@@ -24,26 +24,28 @@ def get_version() -> str:
 
 
 def get_package_info() -> str:
-    """Get formatted package information for help display."""
+    """Get formatted package information for epilogue display."""
     from importlib.metadata import metadata
     try:
         meta = metadata("gs-batch-pdf")
         pkg_version = meta.get("Version", "unknown")
         author = meta.get("Author", "kompre")
-        return f"gs-batch-pdf v{pkg_version} | by {author}"
+        return f"gs-batch-pdf v{pkg_version} | by {author} | https://github.com/kompre/gs-batch"
     except PackageNotFoundError:
-        return "gs-batch-pdf"
+        return "gs-batch-pdf | https://github.com/kompre/gs-batch"
 
 
-EPILOG = """
-Examples: gsb --compress . | gsb -r --compress ./docs/ | gsb --pdfa file.pdf
-"""
+def get_epilog() -> str:
+    """Get formatted epilog with examples and package info."""
+    return f"""Examples: gsb --compress . | gsb -r --compress ./docs/ | gsb --pdfa file.pdf
+
+{get_package_info()}"""
 
 
 @click.command(
     no_args_is_help=True,
-    epilog=EPILOG,
-    help=f"{get_package_info()}\n\nBatch process PDF files using Ghostscript with parallel compression and format conversion."
+    epilog=get_epilog(),
+    help="Batch process PDF files using Ghostscript with parallel compression and format conversion."
 )
 @click.version_option(version=get_version(), prog_name="gs-batch-pdf")
 @click.option(

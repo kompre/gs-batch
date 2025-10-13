@@ -375,7 +375,7 @@ Options:
 ```
 Usage: gsb [OPTIONS] [FILES]...
 
-  gs-batch-pdf v0.5.5 | © 2025 kompre
+  gs-batch-pdf v0.5.5 | by kompre
 
   Batch process PDF files using Ghostscript...
 
@@ -393,6 +393,111 @@ Options:
 - **Version at top:** ✅ Prominent display with author and year
 - **Examples condensed:** ✅ Single line, most common use cases
 - **No regressions:** ✅ All functionality preserved
+
+---
+
+## Session: README Enhancement & CLI Epilogue Update (2025-10-13)
+
+### Changes Made
+
+#### 1. Moved Package Metadata to Epilogue (gs_batch/gs_batch.py)
+
+**Problem:**
+- Package metadata (name, version, author) was displayed in help text at the top
+- Made the help text feel cluttered
+- User wanted info at bottom with GitHub link
+
+**Solution:**
+- Modified `get_package_info()` to include GitHub URL:
+  - Format: `gs-batch-pdf v0.5.5 | by kompre | https://github.com/kompre/gs-batch`
+- Created `get_epilog()` function that combines examples + package info
+- Moved from `help` parameter to `epilog` parameter in `@click.command()`
+- Simplified `help` parameter to just the purpose description
+
+**Benefits:**
+- ✅ Clean, focused help text at top
+- ✅ Package metadata and GitHub link visible at bottom
+- ✅ Better information hierarchy
+
+#### 2. Complete README Rewrite
+
+**Problem:**
+- README was outdated and incomplete
+- Missing comprehensive usage documentation
+- Examples didn't show correct syntax for options with optional values
+- No troubleshooting section
+
+**Solution: Comprehensive documentation rewrite**
+
+**Structure Changes:**
+- **Introduction:** Concise, benefit-focused description
+- **Features:** Bold categories for quick scanning (9 key features)
+- **Installation:** Added prerequisites section with Ghostscript install commands
+- **Usage:** Organized into logical subsections
+  - Basic Syntax
+  - Quick Start (4 common examples)
+  - Options (categorized into 4 groups)
+  - Using Options with File Arguments (3 approaches documented)
+- **Examples:** 7 use-case categories with multiple examples each
+- **Output:** Example table with column explanations
+- **Troubleshooting:** 3 common issue categories
+- **Contributing:** Links to GitHub issues
+- **Acknowledgements:** Clear license distinction
+
+**Key Documentation Additions:**
+
+1. **Usage Section Enhancement:**
+   - Processing Options (compress, pdfa, custom options)
+   - File Management Options (prefix, suffix, keep policies)
+   - Search Options (filter, recursive)
+   - Other Options (verbose, open_path, version)
+
+2. **Critical Section: Using Options with File Arguments**
+   Documented 3 approaches for options with optional values:
+   ```bash
+   # 1. Options after files (recommended)
+   gsb *.pdf --compress
+
+   # 2. Explicit values
+   gsb --compress /ebook *.pdf
+
+   # 3. Using -- separator
+   gsb --compress -- *.pdf
+   ```
+
+3. **Example Categories:**
+   - Basic Compression
+   - PDF/A Conversion
+   - Recursive Processing
+   - Custom Output Organization
+   - Advanced Ghostscript Options
+   - Working with Multiple File Types
+   - Scripting and Automation
+
+4. **All Examples Updated:**
+   - Changed from `gsb --compress file.pdf` (incorrect)
+   - To: `gsb file.pdf --compress` (recommended)
+   - Showed alternative syntax where helpful
+
+5. **Troubleshooting Section:**
+   - Ghostscript not found (platform-specific guidance)
+   - PDF/A conversion issues (version requirements)
+   - Permission errors (solutions)
+
+**Validation:**
+- ✅ All examples use correct syntax
+- ✅ Three approaches for optional values documented
+- ✅ Consistent use of `gsb` alias throughout
+- ✅ Platform-specific guidance where needed
+
+### Files Modified
+- `gs_batch/gs_batch.py` - Package info moved to epilogue with GitHub link
+- `README.md` - Complete rewrite with comprehensive documentation
+
+### Validation
+- **CLI Help:** ✅ Package info with GitHub link at bottom
+- **README:** ✅ All examples use correct syntax for optional values
+- **Documentation:** ✅ Comprehensive coverage of all features
 
 ---
 
