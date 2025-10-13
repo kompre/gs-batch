@@ -244,14 +244,6 @@ Combine compression with custom options:
 gsb report.pdf --compress /printer --options "-dCompatibilityLevel=1.7"
 ```
 
-### Working with Multiple File Types
-
-Process both PDFs and images:
-
-```bash
-gsb ./mixed_files/ --filter pdf,png --compress --recursive
-```
-
 ### Scripting and Automation
 
 Silent processing for scripts:
