@@ -29,35 +29,26 @@ jobs:
 
       - name: Install Ghostscript
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ghostscript
-          # Remove Ubuntu's restrictive Ghostscript security policy
-          sudo rm -f /etc/ghostscript/cidfmap
+          cd /tmp
+          wget https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10060/gs_10.06.0_amd64_snap.tgz
+          gunzip gs_10.06.0_amd64_snap.tgz
+          tar xvf gs_10.06.0_amd64_snap.tar
+          cd gs_10.06.0_amd64_snap
+          sudo snap install --devmode gs_10.06.0_amd64.snap
 
       - name: Verify Ghostscript installation
         run: |
-          gs --version
-          which gs
-          # Test if Ghostscript can actually process a PDF
-          echo "%PDF-1.4" > /tmp/test.pdf
-          echo "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj" >> /tmp/test.pdf
-          echo "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj" >> /tmp/test.pdf
-          echo "3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj" >> /tmp/test.pdf
-          echo "xref 0 4" >> /tmp/test.pdf
-          echo "trailer<</Size 4/Root 1 0 R>>" >> /tmp/test.pdf
-          echo "%%EOF" >> /tmp/test.pdf
-          gs -sDEVICE=pdfwrite -o /tmp/test_out.pdf /tmp/test.pdf 2>&1 || echo "Ghostscript test failed"
-          ls -la /tmp/test*.pdf
+          /snap/bin/gs --version
+          echo "/snap/bin" >> $GITHUB_PATH
 
       - name: Sync dependencies
         run: uv sync --all-extras
 
       - name: Run tests
         run: |
-          # Ensure gs is in PATH
-          export PATH="/usr/bin:$PATH"
-          which gs
-          gs --version
+          # Verify gs is accessible
+          /snap/bin/gs --version
+          which gs || echo "gs not in default PATH, using /snap/bin/gs"
           uv run pytest -v
 
   type-check:

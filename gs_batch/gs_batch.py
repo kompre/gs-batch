@@ -403,9 +403,15 @@ def get_ghostscript_command() -> str:
         arch = platform.architecture()[0]
         gs_command = "gswin64c" if arch == "64bit" else "gswin32c"
     elif system in ["Linux", "Darwin"]:
-        # Try both 'gs' and 'ghostscript' (snap installs as 'ghostscript')
+        # Try to find gs in various locations
+        # First try standard PATH
         gs_command = "gs"
         if shutil.which(gs_command) is None:
+            # Try snap installation location
+            snap_gs = "/snap/bin/gs"
+            if os.path.exists(snap_gs):
+                return snap_gs
+            # Try 'ghostscript' command (some snap installations)
             gs_command = "ghostscript"
     elif system == "OS/2":
         gs_command = "gso2"
