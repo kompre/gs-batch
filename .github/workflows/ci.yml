@@ -47,9 +47,10 @@ jobs:
       - name: Run tests
         run: |
           # Verify gs is accessible
-          /snap/bin/gs --version
+          gs --version
           which gs || echo "gs not in default PATH, using /snap/bin/gs"
-          uv run pytest -v
+          # Run tests with verbose Ghostscript output
+          uv run pytest -v -s
 
   type-check:
     name: Type checking with mypy
