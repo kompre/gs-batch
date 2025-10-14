@@ -40,6 +40,9 @@ jobs:
         run: |
           /snap/bin/gs --version
           echo "/snap/bin" >> $GITHUB_PATH
+          # Check which gs is being used after PATH update
+          which gs
+          gs --version
 
       - name: Sync dependencies
         run: uv sync --all-extras
