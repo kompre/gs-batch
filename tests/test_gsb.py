@@ -13,9 +13,28 @@ def setup_test_files():
     temp_dir = tempfile.mkdtemp()
     originals_dir = "tests/assets/originals"
 
+    # Verify originals directory exists
+    if not os.path.exists(originals_dir):
+        raise FileNotFoundError(f"Originals directory not found: {originals_dir}")
+
     # Copy test files to the temp directory
     for file_name in ["file_1.pdf", "file_2.pdf", "file_3.pdf"]:
-        shutil.copy(os.path.join(originals_dir, file_name), temp_dir)
+        source = os.path.join(originals_dir, file_name)
+        dest = os.path.join(temp_dir, file_name)
+
+        # Verify source file exists before copying
+        if not os.path.exists(source):
+            raise FileNotFoundError(f"Source test file not found: {source}")
+
+        shutil.copy(source, dest)
+
+        # Verify file was copied successfully
+        if not os.path.exists(dest):
+            raise FileNotFoundError(f"Failed to copy file to temp directory: {dest}")
+
+        # Verify copied file has content
+        if os.path.getsize(dest) == 0:
+            raise ValueError(f"Copied file is empty: {dest}")
 
     yield temp_dir
 
