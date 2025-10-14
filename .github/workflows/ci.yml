@@ -53,7 +53,12 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run tests
-        run: uv run pytest -v
+        run: |
+          # Ensure gs is in PATH
+          export PATH="/usr/bin:$PATH"
+          which gs
+          gs --version
+          uv run pytest -v
 
   type-check:
     name: Type checking with mypy
