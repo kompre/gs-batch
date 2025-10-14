@@ -85,9 +85,23 @@ def test_copy_default_behavior(setup_test_files):
     )
 
     # Check the output
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        print(f"Exit code: {result.exit_code}")
+        print(f"Output: {result.output}")
+        if result.exception:
+            print(f"Exception: {result.exception}")
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
     output_file = os.path.join(output_dir, "compressed_file_1.pdf")
-    assert os.path.exists(output_file)
+    # List directory contents for debugging
+    if not os.path.exists(output_file):
+        print(f"Output file not found: {output_file}")
+        print(f"Temp directory contents: {os.listdir(temp_dir)}")
+        if os.path.exists(output_dir):
+            print(f"Output directory contents: {os.listdir(output_dir)}")
+        print(f"CLI output: {result.output}")
+
+    assert os.path.exists(output_file), f"Output file does not exist. CLI output: {result.output}"
     assert os.path.getsize(output_file) > 0
 
     # Ensure the originals file is preserved
