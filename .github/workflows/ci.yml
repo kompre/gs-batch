@@ -29,16 +29,14 @@ jobs:
 
       - name: Install Ghostscript
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ghostscript
+          cd /tmp
+          wget https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10060/gs_10.06.0_amd64_snap.tgz
+          gunzip gs_10.06.0_amd64_snap.tgz
+          tar xvf gs_10.06.0_amd64_snap.tar
+          sudo snap install --devmode gs_10.06.0_amd64.snap
 
       - name: Verify Ghostscript installation
-        run: |
-          gs --version
-          # Test basic PDF operation
-          echo "%PDF-1.4" > /tmp/test.pdf
-          echo "%%EOF" >> /tmp/test.pdf
-          gs -sDEVICE=pdfwrite -o /tmp/test_out.pdf /tmp/test.pdf || echo "Ghostscript test failed"
+        run: ghostscript --version
 
       - name: Sync dependencies
         run: uv sync --all-extras
