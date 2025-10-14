@@ -403,7 +403,10 @@ def get_ghostscript_command() -> str:
         arch = platform.architecture()[0]
         gs_command = "gswin64c" if arch == "64bit" else "gswin32c"
     elif system in ["Linux", "Darwin"]:
+        # Try both 'gs' and 'ghostscript' (snap installs as 'ghostscript')
         gs_command = "gs"
+        if shutil.which(gs_command) is None:
+            gs_command = "ghostscript"
     elif system == "OS/2":
         gs_command = "gso2"
     else:
@@ -412,7 +415,8 @@ def get_ghostscript_command() -> str:
     # Check if Ghostscript is available on the system
     if shutil.which(gs_command) is None:
         raise FileNotFoundError(
-            f"Ghostscript command '{gs_command}' not found on the system."
+            f"Ghostscript command '{gs_command}' not found on the system. "
+            f"Please install Ghostscript using your package manager (apt, snap, brew, etc.)."
         )
 
     return gs_command
