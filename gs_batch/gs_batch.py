@@ -486,15 +486,43 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
         result = subprocess.run(
                 [gs_command, "-dPDFINFO", "-dBATCH", "-dNODISPLAY", args[-1]],
                 capture_output=True,
-                text=True,
             )
-        total_length = get_total_page_count(result)
+        # Decode output with error handling for non-UTF-8 characters
+        try:
+            stdout_text = result.stdout.decode('utf-8')
+        except UnicodeDecodeError:
+            # Try common alternative encodings
+            try:
+                stdout_text = result.stdout.decode('latin-1')
+            except UnicodeDecodeError:
+                stdout_text = result.stdout.decode('utf-8', errors='replace')
+
+        # Create a mock result object with decoded text for compatibility
+        class DecodedResult:
+            def __init__(self, stdout, stderr, returncode):
+                self.stdout = stdout
+                self.stderr = stderr
+                self.returncode = returncode
+
+        decoded_result = DecodedResult(stdout_text, result.stderr.decode('utf-8', errors='replace') if result.stderr else '', result.returncode)
+        total_length = get_total_page_count(decoded_result)
+
+        # Log stderr if present and verbose
+        if verbose and decoded_result.stderr:
+            click.echo(f"Ghostscript stderr: {decoded_result.stderr}", err=True)
+
     except subprocess.CalledProcessError as e:
         click.echo(f"Error executing Ghostscript: {e}")
+        if verbose and e.stderr:
+            click.echo(f"Stderr: {e.stderr}", err=True)
         return None
     except ValueError as e:
         click.secho(f'ValueError: {e}', fg='red')
         click.secho(f'Cannot determine total number of pages. Possibly "{args[-1]}" is broken? (e.g. size 0kB)', fg='red')
+        return None
+    except UnicodeDecodeError as e:
+        click.secho(f'UnicodeDecodeError: {e}', fg='red')
+        click.secho(f'Cannot decode Ghostscript output. This may be a locale/encoding issue.', fg='red')
         return None
     except Exception as e:
         click.secho(f'Unexpected error: {e}', fg='red')
