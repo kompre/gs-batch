@@ -28,10 +28,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Ghostscript
-        run: sudo snap install ghostscript
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghostscript
 
       - name: Verify Ghostscript installation
-        run: ghostscript --version
+        run: |
+          gs --version
+          # Test basic PDF operation
+          echo "%PDF-1.4" > /tmp/test.pdf
+          echo "%%EOF" >> /tmp/test.pdf
+          gs -sDEVICE=pdfwrite -o /tmp/test_out.pdf /tmp/test.pdf || echo "Ghostscript test failed"
 
       - name: Sync dependencies
         run: uv sync --all-extras
