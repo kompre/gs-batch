@@ -104,8 +104,9 @@ jobs:
       - name: Check build artifacts
         run: |
           ls -lh dist/
-          test -f dist/*.whl
-          test -f dist/*.tar.gz
+          # Check that at least one wheel and one tarball were created
+          [ -n "$(ls -A dist/*.whl 2>/dev/null)" ] || (echo "No .whl files found" && exit 1)
+          [ -n "$(ls -A dist/*.tar.gz 2>/dev/null)" ] || (echo "No .tar.gz files found" && exit 1)
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

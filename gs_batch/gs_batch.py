@@ -497,15 +497,15 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
             except UnicodeDecodeError:
                 stdout_text = result.stdout.decode('utf-8', errors='replace')
 
-        # Create a mock result object with decoded text for compatibility
-        class DecodedResult:
-            def __init__(self, stdout, stderr, returncode):
-                self.stdout = stdout
-                self.stderr = stderr
-                self.returncode = returncode
-
-        decoded_result = DecodedResult(stdout_text, result.stderr.decode('utf-8', errors='replace') if result.stderr else '', result.returncode)
-        total_length = get_total_page_count(decoded_result)
+        # Create a compatible result object with decoded text
+        # Using a simple object to hold stdout as string for get_total_page_count
+        from types import SimpleNamespace
+        decoded_result = SimpleNamespace(
+            stdout=stdout_text,
+            stderr=result.stderr.decode('utf-8', errors='replace') if result.stderr else '',
+            returncode=result.returncode
+        )
+        total_length = get_total_page_count(decoded_result)  # type: ignore[arg-type]
 
         # Log stderr if present and verbose
         if verbose and decoded_result.stderr:
