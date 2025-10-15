@@ -10,8 +10,10 @@ jobs:
     name: Check version bump
     runs-on: ubuntu-latest
 
-    #Skip if PR has 'skip-version-check' label
+    # Only run on pull_request events (not on push to main)
+    # Skip if PR has 'skip-version-check' label
     if: |
+      github.event_name == 'pull_request' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-version-check')
 
     steps:
