@@ -46,9 +46,11 @@ jobs:
 
       - name: Run tests
         run: |
+          # Add /snap/bin to PATH for this step
+          export PATH="/snap/bin:$PATH"
           # Verify gs is accessible
           gs --version
-          which gs || echo "gs not in default PATH, using /snap/bin/gs"
+          which gs
           # Run tests with verbose Ghostscript output
           uv run pytest -v -s
 
