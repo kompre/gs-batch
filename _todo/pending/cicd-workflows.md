@@ -2,7 +2,66 @@
 
 **Original Objective:** Set up GitHub workflows to build, test, and publish to PyPI with version management ensuring main branch reflects published package state
 
-**Status:** Proposal - Awaiting User Approval
+**Status:** In Progress - Phase 1 Complete
+
+---
+
+## Session Activity Log
+
+### 2025-10-15: Phase 1 Implementation & Ghostscript Fix
+
+#### Work Completed
+
+**Phase 1: CI Workflow Implementation**
+- ✅ Created `.github/workflows/ci.yml`
+- ✅ Configured test matrix (Python 3.12, 3.13)
+- ✅ Added type checking job (mypy)
+- ✅ Added build verification job
+- ✅ All tests passing successfully
+
+**Critical Issue Fixed: Ghostscript CI Failures**
+
+*Problem Discovered:*
+- Initial CI runs failed with "FILE NOT PROCESSED!" errors
+- Snap-installed Ghostscript couldn't access temporary files
+- Sandboxing restrictions prevented file operations in `/tmp`
+
+*Root Causes:*
+1. Snap confinement blocked access to pytest's temporary directories
+2. No health check in CLI to detect misconfigured Ghostscript
+3. Silent failures with unhelpful error messages
+
+*Solutions Implemented:*
+
+1. **CI Workflow Fix** ([.github/workflows/ci.yml](../.github/workflows/ci.yml:30-38))
+   - Replaced snap installation with apt-get
+   - Simplified: `sudo apt-get install -y ghostscript`
+   - Removed complex download/extraction steps
+   - No PATH manipulation needed
+   - apt version has no sandboxing issues
+
+2. **CLI Health Check** ([gs_batch/gs_batch.py](../gs_batch/gs_batch.py:431-501))
+   - Added `check_ghostscript_available()` function
+   - Runs at startup before processing files
+   - Two-stage verification:
+     * Command exists and responds to `--version`
+     * Actual execution test (catches sandboxing)
+   - Provides helpful error messages with troubleshooting
+   - Detects snap issues and suggests apt alternative
+   - Early exit with clear guidance
+
+*Results:*
+- ✅ All 10 tests passing on Python 3.12 and 3.13
+- ✅ CI runtime: ~58 seconds per test job
+- ✅ Files properly processed (no more "FILE NOT PROCESSED!")
+- ✅ Better user experience with immediate feedback
+
+*Commits:*
+- `f399c07` - Fix test assertion for PDF size variations
+- `d49aaf8` - Check Ghostscript return codes to detect failures
+- `53aeb82` - Use Ghostscript 10.04.0 for CI testing
+- `3a7362a` - Fix Ghostscript PATH issue in CI tests
+- `824a994` - Fix CI Ghostscript installation and add health check
 
 ---
 
@@ -560,4 +619,111 @@ If publishing fails:
 
 ---
 
-**Ready to proceed?**
+## Phase 2: Next Steps - Release Workflow
+
+### Current State
+- ✅ Phase 1 Complete: CI workflow working perfectly
+- ✅ Tests passing on Python 3.12 and 3.13
+- ✅ Type checking and build verification working
+- ✅ Ghostscript health check implemented
+
+### Remaining Work
+
+#### 2.1 PyPI Trusted Publishing Setup (User Action Required)
+
+**On PyPI (pypi.org):**
+1. Log in to your PyPI account
+2. Navigate to Account Settings → Publishing
+3. Add new trusted publisher:
+   - Publisher: GitHub
+   - Owner: `kompre`
+   - Repository name: `gs-batch`
+   - Workflow filename: `release.yml`
+   - Environment name: (leave blank or use `release`)
+
+This is a **one-time setup** that enables secure publishing without API tokens.
+
+#### 2.2 Create Release Workflow
+
+**File to create:** `.github/workflows/release.yml`
+
+**Workflow will:**
+1. Trigger on merged PRs with "release" label
+2. Extract version from `pyproject.toml`
+3. Create Git tag (e.g., `v0.5.6`)
+4. Build package with `uv build`
+5. Publish to PyPI using Trusted Publishing (OIDC)
+6. Create GitHub Release with PR description as changelog
+7. Attach build artifacts to release
+
+**Key Features:**
+- Label-triggered (add "release" label to PR before merging)
+- Zero manual steps after merge
+- PR description becomes release notes
+- Automatic tag creation from version
+- Digital attestations via Sigstore
+
+#### 2.3 Create CONTRIBUTING.md
+
+Document the release process:
+- How to bump version in `pyproject.toml`
+- How to write good PR descriptions (they become release notes!)
+- How to add "release" label
+- Versioning guidelines (SemVer)
+- Troubleshooting section
+
+#### 2.4 Test Release Flow
+
+**Recommendation: Test with TestPyPI first**
+
+1. Modify `release.yml` to use TestPyPI:
+   ```yaml
+   repository-url: https://test.pypi.org/legacy/
+   ```
+2. Create test PR with version bump
+3. Add "release" label
+4. Merge and verify workflow
+5. Check package on test.pypi.org
+6. Switch to production PyPI
+
+#### 2.5 First Production Release
+
+Once tested:
+1. Create PR with real version bump
+2. Write comprehensive PR description
+3. Add "release" label
+4. Merge to main
+5. Monitor workflow execution
+6. Verify package on PyPI
+7. Test installation: `pip install gs-batch-pdf`
+
+### Estimated Time
+- PyPI setup: 10 minutes
+- Release workflow creation: 1 hour
+- Documentation: 30 minutes
+- Testing (TestPyPI): 30 minutes
+- First release: 30 minutes
+
+**Total: ~2.5 hours**
+
+### Questions Before Proceeding
+
+1. **Do you have maintainer access to the PyPI project `gs-batch-pdf`?**
+   - Needed to configure Trusted Publishing
+
+2. **Should we test with TestPyPI first or go straight to production?**
+   - Recommendation: TestPyPI for safety
+
+3. **Do you want branch protection rules?**
+   - Require CI to pass before merge
+   - Require code review
+   - Recommendation: Yes, enable after testing
+
+4. **Version-check workflow (optional Phase 3)?**
+   - Prevents merging PRs without version bump
+   - Can be added later if needed
+   - Recommendation: Skip for now
+
+---
+
+**Ready to proceed with Phase 2?**
