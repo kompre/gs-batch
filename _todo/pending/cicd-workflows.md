@@ -780,3 +780,246 @@ Once tested:
 **Test Version Target:** 0.5.6
 
 ---
+
+### 2025-10-15 (Later): Phase 2 Redesign - Automated Version Bumping
+
+#### Major Strategy Change
+
+**Previous Approach (Discarded):**
+- User manually bumps version in PR
+- Workflow reads version from pyproject.toml
+- Creates tag and publishes
+
+**New Approach (Implemented):**
+- NO manual version editing required
+- Version bump happens automatically via `uv version --bump <type>`
+- Bump type determined by PR labels
+- Version committed to main after merge
+
+#### Motivation for Change
+User requested automated version bumping using uv's built-in capabilities:
+- Eliminates manual version editing errors
+- Leverages uv's semantic versioning support
+- Clearer release intent via labels
+- Follows modern Python tooling best practices
+
+#### Files Modified
+
+**1. Deleted `.github/workflows/version-check.yml`**
+- No longer needed (PRs don't contain version bumps)
+- Version checking would always fail with new approach
+- Version bumping happens post-merge
+
+**2. Completely Redesigned `.github/workflows/release.yml`**
+
+New workflow features:
+- **Label extraction**: Parses `bump:X` label from PR
+- **Bump type validation**: Ensures label matches uv's supported values
+- **Automatic target selection**: PyPI for stable (major/minor/patch/stable), TestPyPI for pre-releases (alpha/beta/rc/dev/post)
+- **Automated version bump**: Runs `uv version --bump <type>`
+- **Version commit**: Commits updated pyproject.toml to main with `[skip ci]`
+- **Concurrency control**: Queues releases instead of running parallel
+- **Smart pre-release detection**: Auto-marks GitHub releases as pre-release for alpha/beta/rc
+
+Supported bump types (from `uv version --bump`):
+- **major**: 1.2.3 → 2.0.0 (breaking changes)
+- **minor**: 1.2.3 → 1.3.0 (new features)
+- **patch**: 1.2.3 → 1.2.4 (bug fixes)
+- **alpha**: 1.2.3 → 1.2.4a1 (alpha pre-release)
+- **beta**: 1.2.3 → 1.2.4b1 (beta pre-release)
+- **rc**: 1.2.3 → 1.2.4rc1 (release candidate)
+- **stable**: 1.2.4rc1 → 1.2.4 (remove pre-release suffix)
+- **post**: 1.2.3 → 1.2.3.post1 (post-release)
+- **dev**: 1.2.3 → 1.2.4.dev1 (development release)
+
+Workflow steps:
+1. Checkout main after merge
+2. Extract and validate bump type from `bump:X` label
+3. Automatically determine target (PyPI vs TestPyPI) based on bump type
+4. Run `uv version --bump <type>` to update pyproject.toml
+5. Commit version change to main (includes PR co-author)
+6. Check tag doesn't already exist
+7. Create annotated tag with metadata
+8. Build package
+9. Publish to correct PyPI (automatic selection)
+10. Create GitHub Release (marks as pre-release if needed)
+
+**3. Ready to Update `CONTRIBUTING.md`**
+- Will document new label-based release process
+- Remove references to manual version editing
+- Add examples for different release types
+
+#### Branch Protection Considerations
+
+**Challenge:** Workflow needs to push version commit to protected main branch.
+
+**Solutions investigated:**
+1. **GitHub App token** (most secure, requires setup)
+2. **Admin PAT** (simpler, less secure)
+3. **Relaxed protection** (require CI on PRs, allow workflow pushes)
+
+**Current implementation:** Using default `GITHUB_TOKEN`
+- Works if branch protection allows Actions bot
+- May need configuration based on branch protection rules
+- Can upgrade to GitHub App if needed
+
+**Recommendation:**
+- Start with current implementation
+- Configure branch protection to allow `github-actions[bot]`
+- Or adjust branch protection to only enforce rules on PRs, not direct pushes from workflows
+
+#### Concurrency Control
+
+Added concurrency group to prevent race conditions:
+```yaml
+concurrency:
+  group: release
+  cancel-in-progress: false  # Queue instead of cancel
+```
+
+If multiple release PRs merge quickly, releases queue instead of conflicting.
+
+#### New Release Process
+
+**For developers:**
+1. Create PR with changes (NO version editing!)
+2. Add labels:
+   - `release` (required)
+   - `bump:minor` or other bump type (required - automatically determines target)
+3. Get CI to pass, obtain approval
+4. Merge PR
+5. Workflow handles everything: bump → commit → tag → build → publish to correct PyPI
+
+**After merge:**
+- Main branch will have one additional commit (the version bump)
+- Commit message includes `[skip ci]` to avoid triggering CI again
+- Tag points to the version bump commit
+- Published package matches tagged commit exactly
+
+#### Benefits of New Approach
+
+- ✅ No manual version editing (eliminates typos)
+- ✅ Consistent version bumping via uv
+- ✅ Clear release intent via labels
+- ✅ Version bump recorded in git history
+- ✅ Automatic pre-release detection
+- ✅ Supports all SemVer patterns including pre-releases
+- ✅ Zero manual post-merge steps
+- ✅ Co-author attribution in version commit
+
+#### Labels to Create
+
+Need to create these labels in GitHub:
+1. `release` - Triggers release workflow (already exists ✅)
+2. `bump:major` - Breaking changes (→ PyPI)
+3. `bump:minor` - New features (→ PyPI)
+4. `bump:patch` - Bug fixes (→ PyPI)
+5. `bump:stable` - Stabilize pre-release (→ PyPI)
+6. `bump:alpha` - Alpha pre-release (→ TestPyPI)
+7. `bump:beta` - Beta pre-release (→ TestPyPI)
+8. `bump:rc` - Release candidate (→ TestPyPI)
+9. `bump:post` - Post-release (→ TestPyPI)
+10. `bump:dev` - Development release (→ TestPyPI)
+
+**Note:** No target labels needed! Target is automatically determined by bump type.
+
+#### Current Status
+
+- ✅ version-check.yml deleted
+- ✅ release.yml completely redesigned
+- ✅ Automated version bumping implemented
+- ✅ Label-based workflow complete
+- ✅ Concurrency control added
+- ✅ Automatic target selection (no manual target labels!)
+- ✅ CONTRIBUTING.md updated with automatic target selection
+- ✅ cicd-workflows.md updated
+- 🔄 Testing with actual PR pending
+- 🔄 Label creation pending
+
+#### Next Steps
+
+1. Update CONTRIBUTING.md with new process
+2. Create GitHub labels
+3. Test with version bump PR (use `bump:stable` to go from 0.5.6rc2 → 0.5.7)
+4. Configure branch protection if needed
+5. Verify TestPyPI publishing works
+6. Switch to production PyPI once validated
+
+#### Technical Notes
+
+**Current version:** 0.5.6rc2 (pre-release)
+
+**Testing strategy:**
+- Use `bump:stable` to create 0.5.7 (removes rc suffix)
+- Or use `bump:patch` to create 0.5.7
+- Test with `target:testpypi` first
+- Monitor GitHub Actions logs for any issues
+- Verify commit to main succeeds
+- Check tag creation
+- Confirm TestPyPI package appears
+
+**Potential issues to watch:**
+1. Branch protection blocking workflow commits
+2. Race conditions with concurrent merges (mitigated by concurrency group)
+3. Missing or invalid bump type label (workflow fails with helpful error)
+4. Tag already exists (workflow fails with clear message)
+
+---
+
+### 2025-10-15 (Final): Automatic Target Selection
+
+#### Major Improvement: Removed Manual Target Labels
+
+**Previous approach:**
+- Required `target:testpypi` or `target:pypi` label
+- Risk of human error (publishing pre-release to production)
+- Extra label management overhead
+
+**New approach:**
+- Target automatically determined by bump type
+- **Production PyPI**: `major`, `minor`, `patch`, `stable`
+- **TestPyPI**: `alpha`, `beta`, `rc`, `dev`, `post`
+- Impossible to accidentally publish pre-releases to production
+
+#### Rationale
+
+User asked: "Could we automate the target then, according to policy?"
+
+This eliminates the most error-prone part of the workflow:
+- Pre-releases should never go to production PyPI
+- Stable releases should go to production PyPI
+- The bump type already indicates stability level
+- Why make developers think about it twice?
+
+#### Implementation
+
+**Modified `.github/workflows/release.yml`:**
+```yaml
+# Automatic target selection based on bump type
+if [[ "$BUMP_TYPE" =~ ^(major|minor|patch|stable)$ ]]; then
+  # Production PyPI for stable releases
+  repository_url=https://upload.pypi.org/legacy/
+else
+  # TestPyPI for pre-releases
+  repository_url=https://test.pypi.org/legacy/
+fi
+```
+
+**Updated documentation:**
+- CONTRIBUTING.md: Removed all target label references
+- Added "Automatic Target Selection" section explaining the policy
+- Updated examples to show simpler workflow
+
+**Benefits:**
+- ✅ Fewer labels (9 instead of 11)
+- ✅ Zero risk of publishing pre-release to production
+- ✅ Clearer workflow (bump type implies everything)
+- ✅ Policy enforcement built into workflow
+- ✅ Simpler mental model for contributors
+
+**Test Plan:**
+1. Create labels (9 bump types only)
+2. Test PR with `bump:stable` → Should auto-select PyPI
+3. Future PR with `bump:rc` → Should auto-select TestPyPI
+
+---
