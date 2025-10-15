@@ -30,11 +30,11 @@ jobs:
       - name: Install Ghostscript
         run: |
           cd /tmp
-          wget https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10060/gs_10.06.0_amd64_snap.tgz
-          gunzip gs_10.06.0_amd64_snap.tgz
-          tar xvf gs_10.06.0_amd64_snap.tar
-          cd gs_10.06.0_amd64_snap
-          sudo snap install --devmode gs_10.06.0_amd64.snap
+          wget https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/gs_10.04.0_amd64_snap.tgz
+          gunzip gs_10.04.0_amd64_snap.tgz
+          tar xvf gs_10.04.0_amd64_snap.tar
+          cd gs_10.04.0_amd64_snap
+          sudo snap install --devmode gs_10.04.0_amd64.snap
 
       - name: Verify Ghostscript installation
         run: |
