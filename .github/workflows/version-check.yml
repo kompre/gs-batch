@@ -1,0 +1,110 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-version:
+    name: Check version bump
+    runs-on: ubuntu-latest
+
+    #Skip if PR has 'skip-version-check' label
+    if: |
+      !contains(github.event.pull_request.labels.*.name, 'skip-version-check')
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Get PR version
+        id: pr_version
+        run: |
+          PR_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$PR_VERSION" >> $GITHUB_OUTPUT
+          echo "📦 PR version: $PR_VERSION"
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Get main version
+        id: main_version
+        run: |
+          MAIN_VERSION=$(grep '^version = ' main-branch/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$MAIN_VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Main version: $MAIN_VERSION"
+
+      - name: Compare versions
+        run: |
+          PR_VERSION="${{ steps.pr_version.outputs.version }}"
+          MAIN_VERSION="${{ steps.main_version.outputs.version }}"
+
+          echo "Comparing versions:"
+          echo "  Main:  $MAIN_VERSION"
+          echo "  PR:    $PR_VERSION"
+
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo "❌ Error: Version not bumped!"
+            echo ""
+            echo "The version in your PR ($PR_VERSION) is the same as main ($MAIN_VERSION)."
+            echo ""
+            echo "Please update the version in pyproject.toml following Semantic Versioning:"
+            echo "  - MAJOR (x.0.0): Breaking changes"
+            echo "  - MINOR (0.x.0): New features (backward compatible)"
+            echo "  - PATCH (0.0.x): Bug fixes"
+            echo ""
+            echo "To bypass this check, add the 'skip-version-check' label to your PR."
+            exit 1
+          fi
+
+          echo "✅ Version has been bumped: $MAIN_VERSION → $PR_VERSION"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.pr_version.outputs.version }}"
+
+          # Check if version matches semantic versioning pattern
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)?[0-9]*$'; then
+            echo "⚠️  Warning: Version '$VERSION' doesn't follow standard SemVer format"
+            echo "Expected format: MAJOR.MINOR.PATCH (e.g., 0.5.7)"
+            echo "Or with pre-release: MAJOR.MINOR.PATCHa1, MAJOR.MINOR.PATCHb1, MAJOR.MINOR.PATCHrc1"
+            echo ""
+            echo "This is a warning, not an error. The build will continue."
+          else
+            echo "✅ Version format is valid"
+          fi
+
+      - name: Add comment to PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prVersion = '${{ steps.pr_version.outputs.version }}';
+            const mainVersion = '${{ steps.main_version.outputs.version }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## ❌ Version Bump Required
+
+The version in this PR (\`${prVersion}\`) is the same as main (\`${mainVersion}\`).
+
+### Action Required
+
+Update the version in \`pyproject.toml\` following [Semantic Versioning](https://semver.org/):
+
+- **MAJOR** (x.0.0): Breaking changes, incompatible API changes
+- **MINOR** (0.x.0): New features, backward compatible
+- **PATCH** (0.0.x): Bug fixes, no new features
+
+### Bypass
+
+If this PR doesn't require a version bump (e.g., documentation only), add the \`skip-version-check\` label.`
+            });

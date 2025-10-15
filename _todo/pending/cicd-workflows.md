@@ -706,24 +706,33 @@ Once tested:
 
 **Total: ~2.5 hours**
 
-### Questions Before Proceeding
+### User Decisions
 
-1. **Do you have maintainer access to the PyPI project `gs-batch-pdf`?**
-   - Needed to configure Trusted Publishing
+1. **PyPI/TestPyPI Setup:** ✅ TestPyPI configured and ready
+2. **Test approach:** ✅ Test with TestPyPI first
+3. **Branch protection rules:** ✅ Yes, enable after testing
+4. **Version-check workflow:** ✅ Yes, implement it (Phase 3)
 
-2. **Should we test with TestPyPI first or go straight to production?**
-   - Recommendation: TestPyPI for safety
+### Implementation Order
 
-3. **Do you want branch protection rules?**
-   - Require CI to pass before merge
-   - Require code review
-   - Recommendation: Yes, enable after testing
+**Phase 2A: Release Workflow (TestPyPI)**
+1. Create `.github/workflows/release.yml` targeting TestPyPI
+2. Create `CONTRIBUTING.md` with release process documentation
+3. Test release flow with version bump PR
+4. Verify on test.pypi.org
 
-4. **Version-check workflow (optional Phase 3)?**
-   - Prevents merging PRs without version bump
-   - Can be added later if needed
-   - Recommendation: Skip for now
+**Phase 2B: Version Check Workflow**
+1. Create `.github/workflows/version-check.yml`
+2. Enforce version bumps on PRs to main
+3. Allow bypass with `skip-version-check` label
+4. Test with dummy PR
+
+**Phase 2C: Production Release**
+1. Switch release workflow from TestPyPI to production PyPI
+2. Configure production PyPI Trusted Publishing
+3. Enable branch protection rules
+4. First production release
 
 ---
 
-**Ready to proceed with Phase 2?**
+**Starting Phase 2A...**

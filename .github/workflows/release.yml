@@ -1,4 +1,4 @@
-name: Release to PyPI
+name: Release to TestPyPI
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   release:
-    name: Build and publish to PyPI
+    name: Build and publish to TestPyPI
     # Only run if PR was merged and has 'release' label
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
@@ -60,9 +60,10 @@ jobs:
           echo "📦 Build artifacts:"
           ls -lh dist/
 
-      - name: Publish to PyPI
+      - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          repository-url: https://test.pypi.org/legacy/
           print-hash: true
           verbose: true
 
@@ -77,6 +78,15 @@ jobs:
             ${{ github.event.pull_request.body }}
 
             ---
+
+            **⚠️ Published to TestPyPI** (not production PyPI)
+
+            Install from TestPyPI:
+            ```bash
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf==${{ steps.get_version.outputs.version }}
+            ```
+
+            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/${{ steps.get_version.outputs.version }}/
 
             **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.get_version.outputs.version }}...HEAD
           files: dist/*

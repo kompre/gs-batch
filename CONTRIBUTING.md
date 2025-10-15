@@ -106,11 +106,22 @@ Releases are automated through GitHub Actions. Only maintainers can create relea
    - ✅ Workflow reads version from `pyproject.toml`
    - ✅ Creates Git tag (e.g., `v0.5.7`)
    - ✅ Builds wheel and source distribution
-   - ✅ Publishes to PyPI with Trusted Publishing
+   - ✅ Publishes to **TestPyPI** with Trusted Publishing (currently in testing phase)
    - ✅ Creates GitHub Release with your PR description
    - ✅ Attaches build artifacts to release
 
-**That's it!** The package is now live on PyPI.
+**That's it!** The package is now live on TestPyPI.
+
+> **Note:** Currently publishing to TestPyPI for testing. Will switch to production PyPI once validated.
+
+### Installing from TestPyPI
+
+To install the test release:
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf==0.5.7
+```
+
+The `--extra-index-url` is needed because dependencies are not on TestPyPI.
 
 ### Versioning Guidelines
 
