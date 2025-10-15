@@ -10,8 +10,10 @@ jobs:
     name: Check version bump
     runs-on: ubuntu-latest
 
-    #Skip if PR has 'skip-version-check' label
+    # Only run on pull_request events (not on push to main)
+    # Skip if PR has 'skip-version-check' label
     if: |
+      github.event_name == 'pull_request' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-version-check')
 
     steps:
@@ -88,23 +90,27 @@ jobs:
             const prVersion = '${{ steps.pr_version.outputs.version }}';
             const mainVersion = '${{ steps.main_version.outputs.version }}';
 
+            const body = [
+              '## ❌ Version Bump Required',
+              '',
+              `The version in this PR (\`${prVersion}\`) is the same as main (\`${mainVersion}\`).`,
+              '',
+              '### Action Required',
+              '',
+              'Update the version in `pyproject.toml` following [Semantic Versioning](https://semver.org/):',
+              '',
+              '- **MAJOR** (x.0.0): Breaking changes, incompatible API changes',
+              '- **MINOR** (0.x.0): New features, backward compatible',
+              '- **PATCH** (0.0.x): Bug fixes, no new features',
+              '',
+              '### Bypass',
+              '',
+              'If this PR doesn\'t require a version bump (e.g., documentation only), add the `skip-version-check` label.'
+            ].join('\n');
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## ❌ Version Bump Required
-
-The version in this PR (\`${prVersion}\`) is the same as main (\`${mainVersion}\`).
-
-### Action Required
-
-Update the version in \`pyproject.toml\` following [Semantic Versioning](https://semver.org/):
-
-- **MAJOR** (x.0.0): Breaking changes, incompatible API changes
-- **MINOR** (0.x.0): New features, backward compatible
-- **PATCH** (0.0.x): Bug fixes, no new features
-
-### Bypass
-
-If this PR doesn't require a version bump (e.g., documentation only), add the \`skip-version-check\` label.`
+              body: body
             });
