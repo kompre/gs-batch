@@ -4,6 +4,13 @@
 
 <!-- Add tasks here. When creating a proposal, move the task description to the proposal file -->
 
+### CI/CD Workflows: Build, Test, and PyPI Publishing
+**Status:** In Development
+**Details:** `_todo/pending/cicd-workflows.md`
+**Priority:** High
+**Branch:** `feature/cicd-workflows`
+**Objective:** Set up GitHub Actions workflows for automated testing, building, and publishing to PyPI with version management that ensures main branch reflects published package state.
+
 ### Test coverage
 **Status:** Proposal created - awaiting review
 **Proposal:** `_todo/proposal/add-tests.md`

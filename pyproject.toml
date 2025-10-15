@@ -1,6 +1,6 @@
 [project]
 name = "gs-batch-pdf"
-version = "0.5.5"
+version = "0.5.6rc1"
 description = "cli tool wrapper for manipulating multiple pdfs file in parallel using ghostscript (compressing, convert to pdfa, etc.)"
 authors = [{ name = "kompre", email = "s.follador@gmail.com" }]
 requires-python = ">=3.12"

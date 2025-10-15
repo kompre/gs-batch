@@ -1,0 +1,95 @@
+name: Release to TestPyPI
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    name: Build and publish to TestPyPI
+    # Only run if PR was merged and has 'release' label
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Create releases and tags
+      id-token: write  # OIDC for PyPI Trusted Publishing
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for proper tagging
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+          echo "🏷️  Tag: v$VERSION"
+
+      - name: Check if tag already exists
+        run: |
+          if git rev-parse "refs/tags/${{ steps.get_version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "❌ Error: Tag ${{ steps.get_version.outputs.tag }} already exists!"
+            echo "This version has already been released."
+            exit 1
+          fi
+          echo "✅ Tag ${{ steps.get_version.outputs.tag }} is available"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.get_version.outputs.tag }}" -m "Release version ${{ steps.get_version.outputs.version }}"
+          git push origin "${{ steps.get_version.outputs.tag }}"
+          echo "✅ Created and pushed tag: ${{ steps.get_version.outputs.tag }}"
+
+      - name: Build package
+        run: |
+          uv build
+          echo "📦 Build artifacts:"
+          ls -lh dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          print-hash: true
+          verbose: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            # ${{ github.event.pull_request.title }}
+
+            ${{ github.event.pull_request.body }}
+
+            ---
+
+            **⚠️ Published to TestPyPI** (not production PyPI)
+
+            Install from TestPyPI:
+            ```bash
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf==${{ steps.get_version.outputs.version }}
+            ```
+
+            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/${{ steps.get_version.outputs.version }}/
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.get_version.outputs.version }}...HEAD
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
