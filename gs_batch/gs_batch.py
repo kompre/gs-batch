@@ -493,6 +493,15 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
                 [gs_command, "-dPDFINFO", "-dBATCH", "-dNODISPLAY", args[-1]],
                 capture_output=True,
             )
+
+        # Check if Ghostscript command succeeded
+        if result.returncode != 0:
+            stderr_text = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
+            click.secho(f'Ghostscript failed to get PDF info (exit code {result.returncode})', fg='red')
+            if verbose and stderr_text:
+                click.echo(f"Ghostscript stderr: {stderr_text}", err=True)
+            return None
+
         # Decode output with error handling for non-UTF-8 characters
         try:
             stdout_text = result.stdout.decode('utf-8')
@@ -555,8 +564,19 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
                 if line.startswith("Page "):
                     bar.update(1)
 
+        # Wait for process to complete and check return code
+        returncode = process.wait()
+        if returncode != 0:
+            click.secho(f'Ghostscript processing failed (exit code {returncode})', fg='red')
+            if verbose:
+                click.echo(f"Command: {' '.join(full_command)}", err=True)
+            return None
+
     except subprocess.CalledProcessError as e:
         click.echo(f"Error executing Ghostscript: {e}")
+        return None
+    except Exception as e:
+        click.secho(f'Unexpected error during Ghostscript execution: {e}', fg='red')
         return None
 
     # return a status value if the gs command was successful
