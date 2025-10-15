@@ -1,24 +1,31 @@
-name: Release to TestPyPI
+name: Release
 
 on:
   pull_request:
     types: [closed]
 
+# Prevent concurrent releases
+concurrency:
+  group: release
+  cancel-in-progress: false  # Queue releases instead of canceling
+
 jobs:
   release:
-    name: Build and publish to TestPyPI
+    name: Automated Release
     # Only run if PR was merged and has 'release' label
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Create releases and tags
+      contents: write  # Create releases, tags, and commit version bumps
       id-token: write  # OIDC for PyPI Trusted Publishing
 
     steps:
-      - name: Checkout code
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0  # Full history for proper tagging
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -28,31 +35,112 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Extract version from pyproject.toml
-        id: get_version
+      - name: Extract bump type from labels
+        id: bump_type
         run: |
-          VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Version: $VERSION"
-          echo "🏷️  Tag: v$VERSION"
+          # Get all PR labels as JSON array
+          LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          echo "📋 PR Labels: $LABELS"
 
-      - name: Check if tag already exists
-        run: |
-          if git rev-parse "refs/tags/${{ steps.get_version.outputs.tag }}" >/dev/null 2>&1; then
-            echo "❌ Error: Tag ${{ steps.get_version.outputs.tag }} already exists!"
-            echo "This version has already been released."
+          # Find label starting with "bump:"
+          BUMP_TYPE=$(echo "$LABELS" | jq -r '.[] | select(startswith("bump:")) | sub("bump:"; "")')
+
+          if [ -z "$BUMP_TYPE" ]; then
+            echo "❌ Error: No bump type label found!"
+            echo ""
+            echo "Required: Add one of these labels to your PR:"
+            echo "  - bump:major  → Breaking changes (x.0.0)"
+            echo "  - bump:minor  → New features (0.x.0)"
+            echo "  - bump:patch  → Bug fixes (0.0.x)"
+            echo "  - bump:alpha  → Alpha pre-release (0.0.xa1)"
+            echo "  - bump:beta   → Beta pre-release (0.0.xb1)"
+            echo "  - bump:rc     → Release candidate (0.0.xrc1)"
+            echo "  - bump:stable → Remove pre-release suffix"
+            echo "  - bump:post   → Post-release (0.0.x.post1)"
+            echo "  - bump:dev    → Development release (0.0.x.dev1)"
             exit 1
           fi
-          echo "✅ Tag ${{ steps.get_version.outputs.tag }} is available"
 
-      - name: Create and push tag
+          # Validate bump type against uv's supported values
+          VALID_TYPES="major minor patch stable alpha beta rc post dev"
+          if ! echo "$VALID_TYPES" | grep -qw "$BUMP_TYPE"; then
+            echo "❌ Error: Invalid bump type '$BUMP_TYPE'"
+            echo "Valid types: $VALID_TYPES"
+            exit 1
+          fi
+
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "✅ Bump type: $BUMP_TYPE"
+
+      - name: Determine publish target (automatic based on bump type)
+        id: target
+        run: |
+          BUMP_TYPE="${{ steps.bump_type.outputs.bump_type }}"
+
+          # Production releases: major, minor, patch, stable
+          if [[ "$BUMP_TYPE" =~ ^(major|minor|patch|stable)$ ]]; then
+            echo "repository_url=https://upload.pypi.org/legacy/" >> $GITHUB_OUTPUT
+            echo "target_name=PyPI" >> $GITHUB_OUTPUT
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "🎯 Target: Production PyPI (stable release: $BUMP_TYPE)"
+          else
+            # Pre-releases: alpha, beta, rc, dev, post
+            echo "repository_url=https://test.pypi.org/legacy/" >> $GITHUB_OUTPUT
+            echo "target_name=TestPyPI" >> $GITHUB_OUTPUT
+            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "🎯 Target: TestPyPI (pre-release: $BUMP_TYPE)"
+          fi
+
+      - name: Bump version with uv
+        id: bump_version
+        run: |
+          echo "📦 Current version: $(uv version --short)"
+
+          # Bump the version
+          uv version --bump ${{ steps.bump_type.outputs.bump_type }}
+
+          # Get new version
+          NEW_VERSION=$(uv version --short)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          echo "✅ Bumped to: $NEW_VERSION"
+
+      - name: Commit version bump to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.get_version.outputs.tag }}" -m "Release version ${{ steps.get_version.outputs.version }}"
-          git push origin "${{ steps.get_version.outputs.tag }}"
-          echo "✅ Created and pushed tag: ${{ steps.get_version.outputs.tag }}"
+
+          git add pyproject.toml uv.lock
+          git commit -m "chore: bump version to ${{ steps.bump_version.outputs.version }} [skip ci]
+
+          Automated version bump from merged PR #${{ github.event.pull_request.number }}
+          Bump type: ${{ steps.bump_type.outputs.bump_type }}
+
+          Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>"
+
+          git push origin main
+          echo "✅ Committed version bump to main"
+
+      - name: Check if tag already exists
+        run: |
+          if git rev-parse "refs/tags/${{ steps.bump_version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "❌ Error: Tag ${{ steps.bump_version.outputs.tag }} already exists!"
+            echo "This version has already been released."
+            exit 1
+          fi
+          echo "✅ Tag ${{ steps.bump_version.outputs.tag }} is available"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "${{ steps.bump_version.outputs.tag }}" -m "Release version ${{ steps.bump_version.outputs.version }}
+
+          Released from PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}
+          Bump type: ${{ steps.bump_type.outputs.bump_type }}
+          Target: ${{ steps.target.outputs.target_name }}"
+
+          git push origin "${{ steps.bump_version.outputs.tag }}"
+          echo "✅ Created and pushed tag: ${{ steps.bump_version.outputs.tag }}"
 
       - name: Build package
         run: |
@@ -60,18 +148,23 @@ jobs:
           echo "📦 Build artifacts:"
           ls -lh dist/
 
-      - name: Publish to TestPyPI
+          # Show package info
+          echo ""
+          echo "Package details:"
+          tar -tzf dist/*.tar.gz | head -20
+
+      - name: Publish to ${{ steps.target.outputs.target_name }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
+          repository-url: ${{ steps.target.outputs.repository_url }}
           print-hash: true
           verbose: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          name: Release ${{ steps.get_version.outputs.version }}
+          tag_name: ${{ steps.bump_version.outputs.tag }}
+          name: ${{ steps.target.outputs.is_production == 'true' && format('Release {0}', steps.bump_version.outputs.version) || format('Release {0} (TestPyPI)', steps.bump_version.outputs.version) }}
           body: |
             # ${{ github.event.pull_request.title }}
 
@@ -79,17 +172,21 @@ jobs:
 
             ---
 
-            **⚠️ Published to TestPyPI** (not production PyPI)
+            **📦 Version:** `${{ steps.bump_version.outputs.version }}`
+            **🔖 Bump Type:** `${{ steps.bump_type.outputs.bump_type }}`
+            **🎯 Published To:** ${{ steps.target.outputs.target_name }}
+
+            ${{ steps.target.outputs.is_production == 'false' && format('⚠️ **This is a test release published to TestPyPI**
 
             Install from TestPyPI:
             ```bash
-            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf==${{ steps.get_version.outputs.version }}
+            pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf=={0}
             ```
 
-            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/${{ steps.get_version.outputs.version }}/
+            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/{0}/', steps.bump_version.outputs.version) || format('**PyPI Package:** https://pypi.org/project/gs-batch-pdf/{0}/', steps.bump_version.outputs.version) }}
 
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.get_version.outputs.version }}...HEAD
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ steps.bump_version.outputs.tag }}
           files: dist/*
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.target.outputs.is_production == 'false' || contains(steps.bump_version.outputs.version, 'a') || contains(steps.bump_version.outputs.version, 'b') || contains(steps.bump_version.outputs.version, 'rc') || contains(steps.bump_version.outputs.version, 'dev') }}
           generate_release_notes: true
