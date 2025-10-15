@@ -202,6 +202,9 @@ def _gs_batch_impl(
         ...          False, True, True, "pdf", True, False)
     """
 
+    # Check that Ghostscript is available and functional
+    check_ghostscript_available()
+
     # Validate that paths exist
     invalid_paths = [f for f in files if not os.path.exists(f)]
     if invalid_paths:
@@ -426,6 +429,79 @@ def get_ghostscript_command() -> str:
         )
 
     return gs_command
+
+
+def check_ghostscript_available() -> None:
+    """Verify that Ghostscript is installed and functional.
+
+    Performs two checks:
+    1. Verifies the Ghostscript command exists and responds to --version
+    2. Tests that Ghostscript can actually execute (not blocked by sandboxing)
+
+    Raises:
+        SystemExit: If Ghostscript is not available or not functional, with a
+                   helpful error message and troubleshooting guidance.
+    """
+    try:
+        gs_command = get_ghostscript_command()
+    except (FileNotFoundError, OSError) as e:
+        click.secho("Error: Ghostscript is not installed or not found in PATH", fg="red", err=True)
+        click.echo(f"Details: {e}", err=True)
+        click.echo("\nTroubleshooting:", err=True)
+        click.echo("  - Install Ghostscript using your package manager:", err=True)
+        click.echo("    • Ubuntu/Debian: sudo apt-get install ghostscript", err=True)
+        click.echo("    • macOS: brew install ghostscript", err=True)
+        click.echo("    • Windows: Download from https://www.ghostscript.com/", err=True)
+        click.echo("  - Ensure Ghostscript is in your PATH", err=True)
+        sys.exit(1)
+
+    # Check 1: Verify command exists and responds to --version
+    try:
+        result = subprocess.run(
+            [gs_command, "--version"],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            click.secho("Error: Ghostscript command exists but failed to run", fg="red", err=True)
+            stderr_text = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
+            if stderr_text:
+                click.echo(f"Error output: {stderr_text}", err=True)
+            sys.exit(1)
+    except subprocess.TimeoutExpired:
+        click.secho("Error: Ghostscript command timed out", fg="red", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.secho(f"Error: Failed to run Ghostscript: {e}", fg="red", err=True)
+        sys.exit(1)
+
+    # Check 2: Test that Ghostscript can actually execute (catches sandboxing issues)
+    try:
+        result = subprocess.run(
+            [gs_command, "-sDEVICE=nullpage", "-dBATCH", "-dNODISPLAY", "-c", "quit"],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            click.secho("Error: Ghostscript is installed but cannot execute properly", fg="red", err=True)
+            stderr_text = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
+            if stderr_text:
+                click.echo(f"Error output: {stderr_text}", err=True)
+
+            # Check if this might be a snap sandboxing issue
+            if "snap" in gs_command or "/snap/" in gs_command:
+                click.echo("\nThis appears to be a snap installation of Ghostscript.", err=True)
+                click.echo("Snap packages may have sandboxing restrictions that prevent file access.", err=True)
+                click.echo("\nRecommended solution:", err=True)
+                click.echo("  1. Remove snap version: sudo snap remove ghostscript", err=True)
+                click.echo("  2. Install via apt: sudo apt-get install ghostscript", err=True)
+            sys.exit(1)
+    except subprocess.TimeoutExpired:
+        click.secho("Error: Ghostscript test execution timed out", fg="red", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.secho(f"Error: Failed to test Ghostscript execution: {e}", fg="red", err=True)
+        sys.exit(1)
 
 
 def get_total_page_count(p: subprocess.CompletedProcess) -> int:

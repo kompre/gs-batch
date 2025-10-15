@@ -29,30 +29,19 @@ jobs:
 
       - name: Install Ghostscript
         run: |
-          cd /tmp
-          wget https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/gs_10.04.0_amd64_snap.tgz
-          gunzip gs_10.04.0_amd64_snap.tgz
-          tar xvf gs_10.04.0_amd64_snap.tar
-          cd gs_10.04.0_amd64_snap
-          sudo snap install --devmode gs_10.04.0_amd64.snap
+          sudo apt-get update
+          sudo apt-get install -y ghostscript
 
       - name: Verify Ghostscript installation
         run: |
-          /snap/bin/gs --version
-          echo "/snap/bin" >> $GITHUB_PATH
+          gs --version
+          which gs
 
       - name: Sync dependencies
         run: uv sync --all-extras
 
       - name: Run tests
-        run: |
-          # Add /snap/bin to PATH for this step
-          export PATH="/snap/bin:$PATH"
-          # Verify gs is accessible
-          gs --version
-          which gs
-          # Run tests with verbose Ghostscript output
-          uv run pytest -v -s
+        run: uv run pytest -v
 
   type-check:
     name: Type checking with mypy
