@@ -152,7 +152,6 @@ jobs:
           echo ""
           echo "Package details:"
           tar -tzf dist/*.tar.gz | head -20
-
       - name: Publish to PyPI
         if: steps.target.outputs.is_production == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
