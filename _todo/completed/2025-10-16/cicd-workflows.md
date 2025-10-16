@@ -2,7 +2,7 @@
 
 **Original Objective:** Set up GitHub workflows to build, test, and publish to PyPI with version management ensuring main branch reflects published package state
 
-**Status:** In Progress - Phase 1 Complete
+**Status:** ✅ COMPLETE - All Phases Finished
 
 ---
 
@@ -1021,5 +1021,163 @@ fi
 1. Create labels (9 bump types only)
 2. Test PR with `bump:stable` → Should auto-select PyPI
 3. Future PR with `bump:rc` → Should auto-select TestPyPI
+
+---
+
+### 2025-10-16: Final Testing & Production Validation
+
+#### Critical Bug Fix: dist/ Folder in Git
+
+**Problem Discovered:**
+- The `dist/` folder with 28 historical package builds was tracked in git
+- When workflow checked out main, all old packages came with it
+- `pypa/gh-action-pypi-publish` tried to create attestations for ALL packages
+- Failed when trying to publish already-published versions to TestPyPI
+
+**Root Cause:**
+- dist/ files were committed before .gitignore was updated
+- Even though dist/ was in .gitignore, git still tracked existing files
+- Workflow couldn't distinguish new build from old ones
+
+**Solution:**
+- Removed all dist/ files from git tracking: `git rm -r --cached dist/`
+- 28 files deleted from tracking (wheels and tarballs)
+- dist/ remains in .gitignore, preventing future commits
+- Now only freshly built package exists in dist/ when workflow runs
+
+**Commits:**
+- `81a94fd` - fix: Remove dist/ folder from git tracking
+
+#### Successful Test Results
+
+**Test Release: v0.5.6rc6**
+
+✅ **Workflow Run #18570373709 - SUCCESS**
+- All steps completed in 44 seconds
+- Version bumped: `0.5.6rc5` → `0.5.6rc6`
+- Only 1 package built (not 28!)
+- Published to TestPyPI successfully
+- Digital attestations generated for wheel and tarball
+- GitHub Release created with full changelog
+- Version bump committed to main with `[skip ci]`
+
+**Verification:**
+- 📦 TestPyPI Package: https://test.pypi.org/project/gs-batch-pdf/0.5.6rc6/
+- 🏷️ GitHub Release: https://github.com/kompre/gs-batch/releases/tag/v0.5.6rc6
+- ✅ Tag created: `v0.5.6rc6`
+- ✅ Attestations: Both .whl and .tar.gz signed with Sigstore
+- ✅ Pre-release correctly marked in GitHub
+
+**Main Branch State:**
+```
+055d74e chore: bump version to 0.5.6rc6 [skip ci]
+a17683a Fix: Remove dist/ from git tracking to fix release workflow
+3df4c3f chore: bump version to 0.5.6rc5 [skip ci]
+```
+
+#### Final Workflow Configuration
+
+**Split Publishing Steps:**
+Updated [release.yml:155-169](../.github/workflows/release.yml) to separate PyPI and TestPyPI:
+
+```yaml
+- name: Publish to PyPI
+  if: steps.target.outputs.is_production == 'true'
+  uses: pypa/gh-action-pypi-publish@release/v1
+  with:
+    print-hash: true
+    verbose: true
+
+- name: Publish to TestPyPI
+  if: steps.target.outputs.is_production == 'false'
+  uses: pypa/gh-action-pypi-publish@release/v1
+  with:
+    repository-url: https://test.pypi.org/legacy/
+    skip-existing: true
+    print-hash: true
+    verbose: true
+```
+
+**Key improvements:**
+- Separate conditional steps for clarity
+- TestPyPI uses explicit `repository-url`
+- `skip-existing` prevents re-upload errors
+- Both use OIDC Trusted Publishing
+
+#### TestPyPI Trusted Publishing Setup
+
+Configured at https://test.pypi.org/manage/account/publishing/:
+- Owner: `kompre`
+- Repository: `gs-batch`
+- Workflow: `release.yml`
+- Environment: (Any) - allows workflow to publish
+
+#### Production Readiness Checklist
+
+✅ **All requirements met:**
+- [x] CI workflow runs on all PRs and pushes
+- [x] Tests execute on Python 3.12 and 3.13
+- [x] Type checking passes (mypy)
+- [x] Package builds successfully
+- [x] Ghostscript health check in place
+- [x] TestPyPI Trusted Publishing configured
+- [x] Production PyPI Trusted Publishing ready
+- [x] Automated version bumping working
+- [x] Label-based release triggering functional
+- [x] Automatic target selection (PyPI vs TestPyPI)
+- [x] GitHub Releases created automatically
+- [x] Digital attestations generated
+- [x] Version commits to main with co-author
+- [x] Concurrency control prevents race conditions
+- [x] dist/ folder properly ignored
+- [x] No API tokens stored anywhere
+- [x] Process fully documented in CONTRIBUTING.md
+
+#### Summary: What Was Achieved
+
+**Three Complete Workflows:**
+
+1. **CI Workflow** ([ci.yml](../.github/workflows/ci.yml))
+   - Test matrix: Python 3.12, 3.13
+   - Type checking with mypy
+   - Build verification
+   - Ghostscript health checks
+   - ~58 seconds runtime
+
+2. **Release Workflow** ([release.yml](../.github/workflows/release.yml))
+   - Triggered by merged PR with `release` + `bump:*` labels
+   - Automatic version bumping via `uv version --bump`
+   - Automatic target selection (PyPI vs TestPyPI)
+   - Tag creation and commit to main
+   - OIDC Trusted Publishing (no tokens)
+   - GitHub Release with full changelog
+   - Digital attestations via Sigstore
+   - ~44 seconds runtime
+
+3. **Documentation** ([CONTRIBUTING.md](../CONTRIBUTING.md))
+   - Complete release process guide
+   - Label reference table
+   - Automatic target selection explanation
+   - Versioning guidelines
+   - Troubleshooting section
+
+**Release Process (Final):**
+1. Create PR with changes (NO manual version editing)
+2. Add labels: `release` + appropriate `bump:*` label
+3. Merge PR → Everything automated:
+   - Version bumped by workflow
+   - Tag created
+   - Package built
+   - Published to correct PyPI (automatic)
+   - GitHub Release created
+   - Version committed to main
+
+**Zero Manual Steps After Merge!**
+
+---
+
+## ✅ TASK COMPLETE
+
+All objectives achieved. The CI/CD system is production-ready and fully tested with TestPyPI. Ready for first production release when needed.
 
 ---
