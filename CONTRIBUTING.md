@@ -56,6 +56,29 @@ Thank you for your interest in contributing to gs-batch-pdf!
 - Update documentation as needed
 - Follow existing code style and conventions
 
+### Branch Protection & CI Requirements
+
+The `main` branch is protected with required status checks. **All PRs must pass CI before merging:**
+
+**Required Checks:**
+- ✅ Test on Python 3.12
+- ✅ Test on Python 3.13
+- ✅ Type checking with mypy
+- ✅ Build package
+
+**What This Means:**
+- You cannot merge a PR until all 4 checks pass
+- PRs must be up to date with `main` before merging
+- Failed tests will block the merge button
+- This ensures all releases are based on tested, working code
+
+**CI runs automatically** when you:
+- Push commits to a branch
+- Open or update a pull request
+- CI typically completes in ~30 seconds
+
+If CI fails, check the workflow logs in GitHub Actions to see which tests failed and why.
+
 ## Release Process
 
 Releases are automated through GitHub Actions using label-triggered version bumping. Only maintainers can create releases.
