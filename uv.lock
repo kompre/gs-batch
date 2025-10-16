@@ -122,7 +122,7 @@ wheels = [
 
 [[package]]
 name = "gs-batch-pdf"
-version = "0.5.6rc4"
+version = "0.5.6rc5"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
