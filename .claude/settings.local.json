@@ -11,7 +11,8 @@
       "Bash(gh run view:*)",
       "Bash(uv run pytest:*)",
       "Bash(git stash:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git branch:*)"
     ],
     "deny": [],
     "ask": []
