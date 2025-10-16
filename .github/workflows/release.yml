@@ -153,10 +153,19 @@ jobs:
           echo "Package details:"
           tar -tzf dist/*.tar.gz | head -20
 
-      - name: Publish to ${{ steps.target.outputs.target_name }}
+      - name: Publish to PyPI
+        if: steps.target.outputs.is_production == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: ${{ steps.target.outputs.repository_url }}
+          print-hash: true
+          verbose: true
+
+      - name: Publish to TestPyPI
+        if: steps.target.outputs.is_production == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
           print-hash: true
           verbose: true
 
