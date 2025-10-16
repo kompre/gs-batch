@@ -21,21 +21,20 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install Ghostscript
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ghostscript
-
-      - name: Verify Ghostscript installation
-        run: |
-          gs --version
-          which gs
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ghostscript
+          version: 1.0
 
       - name: Sync dependencies
         run: uv sync --all-extras
@@ -53,11 +52,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Sync dependencies
         run: uv sync --all-extras
@@ -75,11 +77,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Build package
         run: uv build
