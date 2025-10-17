@@ -295,27 +295,12 @@ def _gs_batch_impl(
     tic = time.time()
     try:
         with multiprocessing.Pool(initializer=init_worker) as pool:
-            gs_results = pool.map(process_file, file_tasks)
+            results = pool.map(process_file, file_tasks)
     except KeyboardInterrupt:
         click.echo("\nProcess interrupted. Terminating pool...")
         pool.terminate()
         pool.join()
         sys.exit(1)
-
-    # Process file operations serially in main thread
-    final_results = []
-    try:
-        for gs_result in gs_results:
-            if gs_result['status'] == 'success':
-                final_result = finalize_output(gs_result)
-                final_results.append(final_result)
-            else:
-                # GS failed - return error result
-                final_results.append(create_error_result(gs_result, "Ghostscript processing failed"))
-    except AbortBatchProcessing as e:
-        click.secho(f"\nBatch processing aborted by user: {e}", fg="red")
-        sys.exit(1)
-
     toc = time.time()
 
     # Print summary table
@@ -325,8 +310,8 @@ def _gs_batch_impl(
         f"\n {'#':>{id_width}s} | {'Original':^{column_width}} | {'New':^{column_width}} | {'Ratio':^{column_width}} | {'Keeping':^{column_width}} | Filename",
         bold=True,
     )
-
-    for r in final_results:
+    
+    for r in results:
         if r.get("message"):
             click.secho(
                 f" {r['id']:>{id_width}d} | {human_readable_size(r['original_size']):>{column_width}} |    {r['message']:^{3*column_width}}    | {r['filename']}",
@@ -337,41 +322,15 @@ def _gs_batch_impl(
                 f" {r['id']:>{id_width}d} | {human_readable_size(r['original_size']):>{column_width}} | {human_readable_size(r['new_size']):>{column_width}} | {r['ratio']:{column_width}.3%} | {r['keeping']:^{column_width}} | {r['filename']}"
             )
 
-    # Summary statistics
-    total_files = len(final_results)
-    successful_files = sum(1 for r in final_results if 'message' not in r)
-    failed_files = total_files - successful_files
-
-    # Calculate total sizes for successfully processed files only
-    total_original_size = sum(r['original_size'] for r in final_results if 'message' not in r)
-    total_new_size = sum(r['new_size'] for r in final_results if 'message' not in r)
-    total_ratio = total_new_size / total_original_size if total_original_size > 0 else 0.0
-
-    if failed_files > 0:
-        click.secho(
-            f"\nProcessed {successful_files} of {total_files} files successfully. "
-            f"{failed_files} file(s) failed.",
-            fg="yellow" if successful_files > 0 else "red"
-        )
-    else:
-        click.secho(f"\nAll {total_files} file(s) processed successfully.", fg="green")
-
-    # Display size statistics for successfully processed files
-    if successful_files > 0:
-        click.echo(
-            f"Total: {human_readable_size(total_original_size)} → "
-            f"{human_readable_size(total_new_size)} ({total_ratio:.1%})"
-        )
-
-    click.echo(f"Total time: {toc - tic:.2f} seconds")
+    click.echo(f"\nTotal time: {toc - tic:.2f} seconds")
 
     # open files folder and select them
     if open_path:
         time.sleep(0.5)
         show_in_file_manager(
-            [r["filename"] for r in final_results]
+            [r["filename"] for r in results]
             if stock_file_manager() != "nautilus"
-            else final_results[0]["filename"]
+            else results[0]["filename"]
         )
 
 
@@ -704,7 +663,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
     """Process a single PDF file with Ghostscript.
 
     Processes a PDF file using Ghostscript with specified compression or PDF/A
-    conversion settings. Returns temp file path and metadata for later finalization.
+    conversion settings, then moves/renames the output based on size comparison.
 
     Args:
         file_info: Tuple containing (id, pdf_file, command_parts, first_argument,
@@ -722,25 +681,20 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
     Returns:
         Dictionary containing processing results with keys:
         - 'id': Task identifier
-        - 'status': 'success' or 'gs_failed'
-        - 'original_file': Path to original input file
+        - 'filename': Absolute path to output file
         - 'original_size': Size of original file in bytes
-        - 'temp_file': Path to Ghostscript output (if successful)
         - 'new_size': Size of processed file in bytes (if successful)
-        - 'prefix': Output filename prefix
-        - 'suffix': Output filename suffix
-        - 'keep_smaller': Whether to keep smaller file
-        - 'force': Whether to force overwrite
+        - 'ratio': Compression ratio as float (if successful)
+        - 'keeping': "original" or "new" indicating which file was kept
+        - 'message': Error message (if processing failed)
 
     Example:
         >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False)
         >>> result = process_file(task)
-        >>> print(result['status'])
-        success
+        >>> print(result['keeping'])
+        new
     """
     id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose = file_info
-
-    original_size = os.path.getsize(pdf_file)
 
     # Create a temporary output file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_output:
@@ -755,272 +709,114 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
     # Run the Ghostscript command
     status = run_ghostscript(id, verbose, gs_command)
 
-    # Return temp file info for finalization in main thread
-    if status:
-        new_size = os.path.getsize(temp_output_file)
-        return {
-            'id': id,
-            'status': 'success',
-            'original_file': pdf_file,
-            'original_size': original_size,
-            'temp_file': temp_output_file,
-            'new_size': new_size,
-            'prefix': prefix,
-            'suffix': suffix,
-            'keep_smaller': keep_smaller,
-            'force': force,
-        }
-    else:
-        # GS failed - cleanup temp file
-        try:
-            if os.path.exists(temp_output_file):
-                os.remove(temp_output_file)
-        except:
-            pass
+    # Move or rename the output file
 
-        return {
-            'id': id,
-            'status': 'gs_failed',
-            'original_file': pdf_file,
-            'original_size': original_size,
-            'prefix': prefix,
-            'suffix': suffix,
-            'keep_smaller': keep_smaller,
-            'force': force,
-        }
-
-
-# Error handling helpers
-class AbortBatchProcessing(Exception):
-    """Exception raised when user chooses to abort batch processing."""
-    pass
-
-
-def cleanup_temp_file(temp_file: str) -> None:
-    """Best-effort cleanup of temporary file."""
-    try:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-    except:
-        pass
-
-
-def create_error_result(gs_result: Dict[str, Any], message: str) -> Dict[str, Any]:
-    """Create standardized error result dict for output table."""
-    return {
-        "id": gs_result['id'],
-        "filename": os.path.abspath(gs_result['original_file']),
-        "original_size": gs_result['original_size'],
-        "message": f"ERROR: {message}",
-    }
-
-
-def is_recoverable_error(e: Exception) -> bool:
-    """Check if error is recoverable and should prompt for retry."""
-    import errno
-
-    # File locked by another process
-    if isinstance(e, PermissionError):
-        return True
-
-    # Disk full or quota exceeded
-    if isinstance(e, OSError) and e.errno in (errno.ENOSPC, errno.EDQUOT):
-        return True
-
-    return False
-
-
-def get_error_suggestion(e: Exception) -> str:
-    """Get user-friendly suggestion for error resolution."""
-    import errno
-
-    if isinstance(e, PermissionError):
-        return "Close the file in any PDF viewers or other applications"
-
-    if isinstance(e, OSError):
-        if e.errno == errno.ENOSPC:
-            return "Free up disk space"
-        elif e.errno == errno.EDQUOT:
-            return "Increase disk quota or free up space"
-
-    return "Check file permissions and available disk space"
-
-
-def prompt_retry_skip_abort(filename: str, error: Exception) -> str:
-    """
-    Prompt user for action on recoverable error.
-
-    Returns: 'retry' | 'skip' | 'abort'
-    """
-    click.secho(f"\nError processing '{os.path.basename(filename)}':", fg="yellow")
-    click.echo(f"  {error}")
-
-    suggestion = get_error_suggestion(error)
-    if suggestion:
-        click.echo(f"  Suggestion: {suggestion}")
-
-    # Display options with explanations
-    click.echo("\nAvailable actions:")
-    click.echo("  [r]etry  - Try the operation again (after fixing the issue)")
-    click.echo("  [s]kip   - Skip this file and continue with the next one")
-    click.echo("  [a]bort  - Stop processing all files and exit")
-
-    response = click.prompt(
-        "\nChoose action",
-        type=click.Choice(['r', 's', 'a'], case_sensitive=False),
-        default='r',
-        show_default=True
+    result = move_output(
+        status, temp_output_file, pdf_file, prefix, suffix, keep_smaller, force, id
     )
 
-    action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
-    return action_map[response.lower()]
+
+    return result
 
 
-def retry_file_operation(operation, filename: str, op_type: str) -> None:
-    """
-    Execute file operation with unlimited retry on recoverable errors.
+def move_output(
+    status: Optional[bool],
+    temp_file: str,
+    original_file: str,
+    prefix: str,
+    suffix: str,
+    keep_smaller: bool,
+    force: bool,
+    id: int,
+) -> Dict[str, Any]:
+    """Move or rename processed PDF based on size comparison.
 
-    Args:
-        operation: Callable that performs the file operation
-        filename: Filename for error messages
-        op_type: Type of operation for error messages ('copy', 'move', 'overwrite')
-
-    Raises:
-        AbortBatchProcessing: If user chooses to abort
-        Exception: If user chooses to skip or non-recoverable error occurs
-    """
-    while True:
-        try:
-            operation()
-            return  # Success
-
-        except (PermissionError, OSError) as e:
-            if is_recoverable_error(e):
-                action = prompt_retry_skip_abort(filename, e)
-
-                if action == 'retry':
-                    continue  # Loop to retry
-                elif action == 'skip':
-                    raise Exception(f"Skipped by user: {e}")
-                else:  # abort
-                    raise AbortBatchProcessing(f"User aborted on {op_type} error: {e}")
-            else:
-                # Non-recoverable error
-                raise Exception(f"Cannot {op_type} file '{filename}': {e}")
-
-
-def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
-    """Move processed file from temp location to final destination.
-
-    Handles file locking with user prompts for retry/skip/abort.
-    Runs in main thread to enable user interaction.
+    Handles output file placement after Ghostscript processing, deciding whether
+    to keep the original or processed file based on size comparison and user
+    preferences. Manages file overwrites and directory creation.
 
     Args:
-        gs_result: Result dict from worker containing temp file path and metadata
+        status: Ghostscript execution result (True=success, None=failure).
+        temp_file: Path to temporary processed PDF file.
+        original_file: Path to original input PDF file.
+        prefix: Prefix to add to output filename (can include directory path).
+        suffix: Suffix to add to output filename before extension.
+        keep_smaller: If True, keep whichever file is smaller; if False, always keep processed file.
+        force: If True, allow overwriting files without prompt.
+        id: Task identifier for result tracking.
 
     Returns:
-        Final result dict for output table
+        Dictionary with processing results:
+        - If successful: 'id', 'filename', 'original_size', 'new_size', 'ratio', 'keeping'
+        - If failed: 'id', 'filename', 'original_size', 'message'
+
+    Example:
+        >>> result = move_output(True, "/tmp/output.pdf", "input.pdf", "compressed_", "", True, False, 0)
+        >>> print(result['keeping'])
+        new
     """
-    id = gs_result['id']
-    original_file = gs_result['original_file']
-    original_size = gs_result['original_size']
-    temp_file = gs_result['temp_file']
-    new_size = gs_result['new_size']
-    prefix = gs_result['prefix']
-    suffix = gs_result['suffix']
-    keep_smaller = gs_result['keep_smaller']
-    force = gs_result['force']
 
-    # Calculate output path (extracted from current move_output logic)
-    root = os.path.dirname(original_file)
-    input_basename = os.path.splitext(os.path.basename(original_file))[0]
-    input_ext = os.path.splitext(os.path.basename(original_file))[1]
+    # Get sizes of original and temporary files
+    original_size = os.path.getsize(original_file)
 
-    if prefix:
-        # Extract directory from prefix if it contains path separators
-        prefix_dir = os.path.dirname(prefix)
-        prefix_name = os.path.basename(prefix)
-        output_dir = os.path.join(root, prefix_dir) if prefix_dir else root
-        output_file = os.path.join(output_dir, f"{prefix_name}{input_basename}{suffix}{input_ext}")
-    else:
-        output_file = os.path.join(root, f"{input_basename}{suffix}{input_ext}")
+    # check if the file was successfully created
+    if status:
+        root, _ = os.path.split(original_file)
+        input_basename, input_ext = os.path.splitext(os.path.basename(original_file))
 
-    overwriting = os.path.abspath(output_file) == os.path.abspath(original_file)
+        # Form the full output file path with prefix and suffix
+        output_file = os.path.join(root, f"{prefix}{input_basename}{suffix}{input_ext}")
 
-    # Determine which file to keep
-    if keep_smaller:
-        # Keep smaller file (default behavior for compression)
-        keeping = "new" if new_size < original_size else "original"
-    else:
-        # Always keep new file (e.g., for PDF/A conversion)
-        keeping = "new"
-
-    # Create output directory if needed
-    output_dir = os.path.dirname(output_file)
-    if output_dir and not os.path.exists(output_dir):
-        try:
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(output_file)
+        if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
-        except (PermissionError, OSError) as e:
-            cleanup_temp_file(temp_file)
-            return create_error_result(gs_result, f"Cannot create directory '{output_dir}': {e}")
 
-    # File operation with retry logic
-    try:
-        match (keeping, overwriting):
-            case ("original", True):
-                # Keep original, remove temp
-                cleanup_temp_file(temp_file)
+        
+        new_size = os.path.getsize(temp_file)
+        ratio = new_size / original_size
 
-            case ("original", False):
-                # Copy original to output, remove temp
-                retry_file_operation(
-                    lambda: shutil.copy(original_file, output_file),
-                    output_file,
-                    "copy"
-                )
-                cleanup_temp_file(temp_file)
+        # conditions for file copy or move
+        keeping = "original" if keep_smaller and new_size >= original_size else "new"
+        is_same_path = os.path.abspath(original_file) == os.path.abspath(output_file)
 
-            case ("new", True):
-                # Overwrite original with new
+        match (keeping, is_same_path):
+            case ("original", True):  # no action is needed
+                os.remove(temp_file)
+
+            case ("original", False):  # copy the original file in the output directory
+                shutil.copy(original_file, output_file)
+                os.remove(temp_file)
+
+            case ("new", True):  # the original file need to be overwritten
                 if force:
-                    retry_file_operation(
-                        lambda: shutil.move(temp_file, output_file),
-                        output_file,
-                        "overwrite"
-                    )
+                    shutil.move(temp_file, output_file)
                 else:
-                    # This should not happen (already handled in main), but safety check
-                    click.echo(f"Skipping overwrite for {output_file} (no --force)")
+                    click.echo(
+                        f"Error: {output_file} already exists. Use the `--force` flag to allow overwriting files and skip this messages."
+                    )
                     keeping = "original"
-                    cleanup_temp_file(temp_file)
+                    os.remove(temp_file)
 
-            case ("new", False):
-                # Move new to output directory
-                retry_file_operation(
-                    lambda: shutil.move(temp_file, output_file),
-                    output_file,
-                    "move"
-                )
+            case ("new", False):  # move the new file to the output directory
+                shutil.move(temp_file, output_file)
 
-    except AbortBatchProcessing:
-        cleanup_temp_file(temp_file)
-        raise  # Re-raise to stop all processing
-
-    except Exception as e:
-        # Unrecoverable error after retries or user skip
-        cleanup_temp_file(temp_file)
-        return create_error_result(gs_result, str(e))
-
-    # Success - return result for table
-    return {
-        "id": id,
-        "filename": os.path.abspath(output_file),
-        "original_size": original_size,
-        "new_size": new_size if keeping == "new" else original_size,
-        "ratio": new_size / original_size if keeping == "new" else 1.0,
-        "keeping": keeping,
-    }
-
+        # Return result for summary
+        return {
+            "original_size": original_size,
+            "new_size": new_size,
+            "ratio": ratio,
+            "keeping": keeping,
+            "filename": os.path.abspath(output_file),
+            "id": id,
+        }
+    else:
+        return {
+            "id": id,
+            "filename": os.path.abspath(original_file),
+            "original_size": original_size,
+            "message": "FILE NOT PROCESSED!",
+        }
 
 from importlib.resources import files, as_file
 from pathlib import Path
