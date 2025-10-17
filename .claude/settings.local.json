@@ -12,7 +12,9 @@
       "Bash(uv run pytest:*)",
       "Bash(git stash:*)",
       "Bash(git commit:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Read(//c/Users/s.follador/.claude/**)",
+      "Bash(uv run python:*)"
     ],
     "deny": [],
     "ask": []
