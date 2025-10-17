@@ -847,11 +847,16 @@ def prompt_retry_skip_abort(filename: str, error: Exception) -> str:
     if suggestion:
         click.echo(f"  Suggestion: {suggestion}")
 
+    # Display options with explanations
+    click.echo("\nAvailable actions:")
+    click.echo("  [r]etry  - Try the operation again (after fixing the issue)")
+    click.echo("  [s]kip   - Skip this file and continue with the next one")
+    click.echo("  [a]bort  - Stop processing all files and exit")
+
     response = click.prompt(
-        "Action?",
+        "\nChoose action",
         type=click.Choice(['r', 's', 'a'], case_sensitive=False),
         default='r',
-        show_choices=True,
         show_default=True
     )
 
