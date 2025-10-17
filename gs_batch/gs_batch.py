@@ -342,6 +342,11 @@ def _gs_batch_impl(
     successful_files = sum(1 for r in final_results if 'message' not in r)
     failed_files = total_files - successful_files
 
+    # Calculate total sizes for successfully processed files only
+    total_original_size = sum(r['original_size'] for r in final_results if 'message' not in r)
+    total_new_size = sum(r['new_size'] for r in final_results if 'message' not in r)
+    total_ratio = total_new_size / total_original_size if total_original_size > 0 else 0.0
+
     if failed_files > 0:
         click.secho(
             f"\nProcessed {successful_files} of {total_files} files successfully. "
@@ -351,7 +356,14 @@ def _gs_batch_impl(
     else:
         click.secho(f"\nAll {total_files} file(s) processed successfully.", fg="green")
 
-    click.echo(f"\nTotal time: {toc - tic:.2f} seconds")
+    # Display size statistics for successfully processed files
+    if successful_files > 0:
+        click.echo(
+            f"Total: {human_readable_size(total_original_size)} → "
+            f"{human_readable_size(total_new_size)} ({total_ratio:.1%})"
+        )
+
+    click.echo(f"Total time: {toc - tic:.2f} seconds")
 
     # open files folder and select them
     if open_path:
