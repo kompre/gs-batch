@@ -181,7 +181,7 @@ def test_keep_originals_when_smaller(setup_test_files):
 
 
 def test_keep_new_when_larger(setup_test_files):
-    """Test that the new file is kept when even if original is smaller."""
+    """Test that --pdfa always keeps the new file (regardless of size)."""
     temp_dir = setup_test_files
     runner = CliRunner()
 
@@ -214,15 +214,15 @@ def test_keep_new_when_larger(setup_test_files):
     )
 
     # Check the output
-
     assert result.exit_code == 0
 
     output_file = os.path.join(output_dir, "compressed_file_3.pdf")
 
-    # Ensure the new file is smaller and kept
+    # With --pdfa, the new file should always be kept (regardless of size)
     assert os.path.exists(test_file)
-    new_size = os.path.getsize(output_file)
-    assert new_size >= os.path.getsize(test_file)
+    assert os.path.exists(output_file)
+    # Verify that "new" appears in output (indicates new file was kept)
+    assert "new" in result.output, "PDF/A should always keep the new file"
 
 
 def test_no_files_match_filter(setup_test_files):
