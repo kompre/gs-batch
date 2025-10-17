@@ -29,6 +29,7 @@ dev = [
     "ipykernel>=6.29.5,<7",
     "mypy>=1.18.2",
     "pytest>=8.3.3,<9",
+    "quarto-cli>=1.8.25",
     "types-tqdm>=4.67.0.20250809",
 ]
 

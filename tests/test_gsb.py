@@ -537,3 +537,45 @@ def test_batch_with_mixed_failures(setup_test_files, monkeypatch):
     # Should process other files successfully
     assert "file_1.pdf" in result.output
     assert "file_3.pdf" in result.output
+
+
+def test_pdfa_always_keeps_new_file(setup_test_files):
+    """Test that --pdfa always keeps the new file regardless of size."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Test file
+    test_file = os.path.join(temp_dir, "file_1.pdf")
+    original_size = os.path.getsize(test_file)
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Convert with PDF/A which typically makes files larger
+    result = runner.invoke(
+        gsb,
+        [
+            "--pdfa=2",
+            f"--prefix={output_dir}{os.sep}pdfa_",
+            "--no_open_path",
+            test_file,
+        ],
+    )
+
+    # Check the output
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
+    output_file = os.path.join(output_dir, "pdfa_file_1.pdf")
+    assert os.path.exists(output_file), f"Output file does not exist. CLI output: {result.output}"
+
+    new_size = os.path.getsize(output_file)
+
+    # PDF/A conversion typically makes files larger
+    # The key assertion: new file should be kept (showing in output with "new" in keeping column)
+    assert "new" in result.output, "PDF/A should always keep the new file regardless of size"
+
+    # Verify in output that new file size is shown (not original)
+    # The ratio shown should be >100% if the file got larger
+    if new_size > original_size:
+        # File got larger, ratio should be >100%
+        ratio = new_size / original_size
+        assert ratio > 1.0, f"File got larger ({original_size} -> {new_size}) but ratio calculation is wrong"

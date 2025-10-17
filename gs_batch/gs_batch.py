@@ -948,10 +948,12 @@ def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
     overwriting = os.path.abspath(output_file) == os.path.abspath(original_file)
 
     # Determine which file to keep
-    if new_size < original_size:
-        keeping = "new" if keep_smaller else "original"
+    if keep_smaller:
+        # Keep smaller file (default behavior for compression)
+        keeping = "new" if new_size < original_size else "original"
     else:
-        keeping = "original"
+        # Always keep new file (e.g., for PDF/A conversion)
+        keeping = "new"
 
     # Create output directory if needed
     output_dir = os.path.dirname(output_file)
