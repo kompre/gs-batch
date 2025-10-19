@@ -126,7 +126,7 @@ wheels = [
 
 [[package]]
 name = "gs-batch-pdf"
-version = "0.6.0rc1"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
