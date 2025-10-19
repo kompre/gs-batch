@@ -42,53 +42,110 @@ jobs:
           LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
           echo "📋 PR Labels: $LABELS"
 
-          # Find label starting with "bump:"
-          BUMP_TYPE=$(echo "$LABELS" | jq -r '.[] | select(startswith("bump:")) | sub("bump:"; "")')
+          # Extract all bump labels
+          BUMP_LABELS=$(echo "$LABELS" | jq -r '.[] | select(startswith("bump:")) | sub("bump:"; "")')
+          BUMP_COUNT=$(echo "$BUMP_LABELS" | wc -w)
 
-          if [ -z "$BUMP_TYPE" ]; then
+          echo "Found $BUMP_COUNT bump label(s): $BUMP_LABELS"
+
+          # Define categories
+          VERSION_COMPONENTS="major minor patch"
+          PRERELEASE_TYPES="rc alpha beta dev"
+          STABLE_TYPES="major minor patch stable post"
+
+          # Separate labels by category
+          COMPONENT=""
+          PRERELEASE=""
+          for label in $BUMP_LABELS; do
+            if echo "$VERSION_COMPONENTS" | grep -qw "$label"; then
+              COMPONENT="$label"
+            elif echo "$PRERELEASE_TYPES" | grep -qw "$label"; then
+              PRERELEASE="$label"
+            elif [ "$label" = "stable" ] || [ "$label" = "post" ]; then
+              COMPONENT="$label"
+            fi
+          done
+
+          # Validation
+          if [ $BUMP_COUNT -eq 0 ]; then
             echo "❌ Error: No bump type label found!"
             echo ""
-            echo "Required: Add one of these labels to your PR:"
+            echo "Required: Add labels to your PR:"
+            echo ""
+            echo "Stable releases (one label) → Production PyPI:"
             echo "  - bump:major  → Breaking changes (x.0.0)"
             echo "  - bump:minor  → New features (0.x.0)"
             echo "  - bump:patch  → Bug fixes (0.0.x)"
-            echo "  - bump:alpha  → Alpha pre-release (0.0.xa1)"
-            echo "  - bump:beta   → Beta pre-release (0.0.xb1)"
-            echo "  - bump:rc     → Release candidate (0.0.xrc1)"
-            echo "  - bump:stable → Remove pre-release suffix"
-            echo "  - bump:post   → Post-release (0.0.x.post1)"
-            echo "  - bump:dev    → Development release (0.0.x.dev1)"
+            echo "  - bump:stable → Remove pre-release suffix (1.0.0rc1 → 1.0.0)"
+            echo "  - bump:post   → Post-release (1.0.0 → 1.0.0.post1)"
+            echo ""
+            echo "Pre-releases (two labels) → TestPyPI:"
+            echo "  - bump:minor + bump:rc    → Release candidate (0.5.6 → 0.6.0rc1)"
+            echo "  - bump:patch + bump:beta  → Beta (0.5.6 → 0.5.7b1)"
+            echo "  - bump:major + bump:alpha → Alpha (0.5.6 → 1.0.0a1)"
+            echo "  - bump:patch + bump:dev   → Development (0.5.6 → 0.5.7.dev1)"
+            exit 1
+          elif [ $BUMP_COUNT -eq 1 ]; then
+            # Must be stable type
+            if ! echo "$STABLE_TYPES" | grep -qw "$BUMP_LABELS"; then
+              echo "❌ Error: Single label '$BUMP_LABELS' is not a stable type"
+              echo ""
+              echo "For stable releases, use: major, minor, patch, stable, or post"
+              echo "For pre-releases, add TWO labels: version component + pre-release type"
+              echo "  Example: bump:minor + bump:rc → 0.5.6 → 0.6.0rc1"
+              exit 1
+            fi
+            BUMP_TYPE_1="$BUMP_LABELS"
+            BUMP_TYPE_2=""
+            HAS_PRERELEASE="false"
+            echo "✅ Stable release: $BUMP_TYPE_1"
+          elif [ $BUMP_COUNT -eq 2 ]; then
+            # Must be component + prerelease
+            if [ -z "$COMPONENT" ] || [ -z "$PRERELEASE" ]; then
+              echo "❌ Error: Two labels must be one version component + one pre-release type"
+              echo ""
+              echo "Version components: major, minor, patch"
+              echo "Pre-release types: rc, alpha, beta, dev"
+              echo ""
+              echo "Examples:"
+              echo "  - bump:minor + bump:rc → 0.5.6 → 0.6.0rc1"
+              echo "  - bump:patch + bump:beta → 0.5.6 → 0.5.7b1"
+              exit 1
+            fi
+            BUMP_TYPE_1="$COMPONENT"
+            BUMP_TYPE_2="$PRERELEASE"
+            HAS_PRERELEASE="true"
+            echo "✅ Pre-release: $BUMP_TYPE_1 + $BUMP_TYPE_2"
+          else
+            echo "❌ Error: Too many bump labels ($BUMP_COUNT)"
+            echo "Maximum 2 labels allowed (version component + pre-release type)"
             exit 1
           fi
 
-          # Validate bump type against uv's supported values
-          VALID_TYPES="major minor patch stable alpha beta rc post dev"
-          if ! echo "$VALID_TYPES" | grep -qw "$BUMP_TYPE"; then
-            echo "❌ Error: Invalid bump type '$BUMP_TYPE'"
-            echo "Valid types: $VALID_TYPES"
-            exit 1
-          fi
-
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "✅ Bump type: $BUMP_TYPE"
+          # Output results
+          echo "bump_type_1=$BUMP_TYPE_1" >> $GITHUB_OUTPUT
+          echo "bump_type_2=$BUMP_TYPE_2" >> $GITHUB_OUTPUT
+          echo "has_prerelease=$HAS_PRERELEASE" >> $GITHUB_OUTPUT
 
       - name: Determine publish target (automatic based on bump type)
         id: target
         run: |
-          BUMP_TYPE="${{ steps.bump_type.outputs.bump_type }}"
+          HAS_PRERELEASE="${{ steps.bump_type.outputs.has_prerelease }}"
+          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
+          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
 
-          # Production releases: major, minor, patch, stable
-          if [[ "$BUMP_TYPE" =~ ^(major|minor|patch|stable)$ ]]; then
-            echo "repository_url=https://upload.pypi.org/legacy/" >> $GITHUB_OUTPUT
-            echo "target_name=PyPI" >> $GITHUB_OUTPUT
-            echo "is_production=true" >> $GITHUB_OUTPUT
-            echo "🎯 Target: Production PyPI (stable release: $BUMP_TYPE)"
-          else
-            # Pre-releases: alpha, beta, rc, dev, post
+          if [ "$HAS_PRERELEASE" = "true" ]; then
+            # Pre-releases (rc, alpha, beta, dev) → TestPyPI
             echo "repository_url=https://test.pypi.org/legacy/" >> $GITHUB_OUTPUT
             echo "target_name=TestPyPI" >> $GITHUB_OUTPUT
             echo "is_production=false" >> $GITHUB_OUTPUT
-            echo "🎯 Target: TestPyPI (pre-release: $BUMP_TYPE)"
+            echo "🎯 Target: TestPyPI (pre-release: $BUMP_TYPE_1 + $BUMP_TYPE_2)"
+          else
+            # Stable releases (major, minor, patch, stable, post) → Production PyPI
+            echo "repository_url=https://upload.pypi.org/legacy/" >> $GITHUB_OUTPUT
+            echo "target_name=PyPI" >> $GITHUB_OUTPUT
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "🎯 Target: Production PyPI (stable release: $BUMP_TYPE_1)"
           fi
 
       - name: Bump version with uv
@@ -96,8 +153,17 @@ jobs:
         run: |
           echo "📦 Current version: $(uv version --short)"
 
-          # Bump the version
-          uv version --bump ${{ steps.bump_type.outputs.bump_type }}
+          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
+          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
+
+          # Bump the version (one or two --bump flags)
+          if [ -n "$BUMP_TYPE_2" ]; then
+            echo "Running: uv version --bump $BUMP_TYPE_1 --bump $BUMP_TYPE_2"
+            uv version --bump $BUMP_TYPE_1 --bump $BUMP_TYPE_2
+          else
+            echo "Running: uv version --bump $BUMP_TYPE_1"
+            uv version --bump $BUMP_TYPE_1
+          fi
 
           # Get new version
           NEW_VERSION=$(uv version --short)
@@ -111,11 +177,20 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
+          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
+
+          if [ -n "$BUMP_TYPE_2" ]; then
+            BUMP_DESCRIPTION="$BUMP_TYPE_1 + $BUMP_TYPE_2"
+          else
+            BUMP_DESCRIPTION="$BUMP_TYPE_1"
+          fi
+
           git add pyproject.toml uv.lock
           git commit -m "chore: bump version to ${{ steps.bump_version.outputs.version }} [skip ci]
 
           Automated version bump from merged PR #${{ github.event.pull_request.number }}
-          Bump type: ${{ steps.bump_type.outputs.bump_type }}
+          Bump type: $BUMP_DESCRIPTION
 
           Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>"
 
@@ -133,10 +208,19 @@ jobs:
 
       - name: Create and push tag
         run: |
+          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
+          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
+
+          if [ -n "$BUMP_TYPE_2" ]; then
+            BUMP_DESCRIPTION="$BUMP_TYPE_1 + $BUMP_TYPE_2"
+          else
+            BUMP_DESCRIPTION="$BUMP_TYPE_1"
+          fi
+
           git tag -a "${{ steps.bump_version.outputs.tag }}" -m "Release version ${{ steps.bump_version.outputs.version }}
 
           Released from PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}
-          Bump type: ${{ steps.bump_type.outputs.bump_type }}
+          Bump type: $BUMP_DESCRIPTION
           Target: ${{ steps.target.outputs.target_name }}"
 
           git push origin "${{ steps.bump_version.outputs.tag }}"
@@ -181,7 +265,7 @@ jobs:
             ---
 
             **📦 Version:** `${{ steps.bump_version.outputs.version }}`
-            **🔖 Bump Type:** `${{ steps.bump_type.outputs.bump_type }}`
+            **🔖 Bump Type:** `${{ steps.bump_type.outputs.bump_type_2 && format('{0} + {1}', steps.bump_type.outputs.bump_type_1, steps.bump_type.outputs.bump_type_2) || steps.bump_type.outputs.bump_type_1 }}`
             **🎯 Published To:** ${{ steps.target.outputs.target_name }}
 
             ${{ steps.target.outputs.is_production == 'false' && format('⚠️ **This is a test release published to TestPyPI**
