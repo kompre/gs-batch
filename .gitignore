@@ -25,3 +25,5 @@ build/
 
 # Temporary files
 tests/assets/output/
+
+.mypy_cache
