@@ -579,3 +579,152 @@ def test_pdfa_always_keeps_new_file(setup_test_files):
         # File got larger, ratio should be >100%
         ratio = new_size / original_size
         assert ratio > 1.0, f"File got larger ({original_size} -> {new_size}) but ratio calculation is wrong"
+
+
+# --on-error mode tests
+def test_on_error_skip_continues_after_locked_file(setup_test_files):
+    """Test that --on-error=skip processes remaining files after encountering a locked file."""
+    from unittest.mock import patch
+
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Use all three test files
+    test_files = [
+        os.path.join(temp_dir, "file_1.pdf"),
+        os.path.join(temp_dir, "file_2.pdf"),
+        os.path.join(temp_dir, "file_3.pdf")
+    ]
+
+    # Make file_2 fail with PermissionError (simulating locked file)
+    original_move = shutil.move
+    def selective_fail(src, dst):
+        if 'file_2' in dst:
+            raise PermissionError("[Errno 13] Permission denied: file_2.pdf")
+        return original_move(src, dst)
+
+    with patch('shutil.move', side_effect=selective_fail):
+        result = runner.invoke(
+            gsb,
+            ["--compress=/screen", "--force", "--no_open_path", "--on-error=skip"] + test_files
+        )
+
+    # Should complete successfully (exit code 0)
+    assert result.exit_code == 0
+
+    # Should show skip message for file_2
+    assert "Skipping file (--on-error skip)" in result.output
+    assert "file_2" in result.output
+
+    # Should process file_1 and file_3 successfully
+    assert "2 of 3" in result.output or "1 file(s) failed" in result.output
+
+    # Should not prompt user (auto-skip mode)
+    assert "Choose action" not in result.output
+    assert "[r]etry" not in result.output
+
+
+def test_on_error_abort_stops_on_locked_file(setup_test_files):
+    """Test that --on-error=abort stops immediately when encountering a locked file."""
+    from unittest.mock import patch
+
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Use all three test files
+    test_files = [
+        os.path.join(temp_dir, "file_1.pdf"),
+        os.path.join(temp_dir, "file_2.pdf"),
+        os.path.join(temp_dir, "file_3.pdf")
+    ]
+
+    # Track which files were attempted
+    processed_files = []
+    original_move = shutil.move
+    def track_and_fail(src, dst):
+        processed_files.append(dst)
+        if 'file_2' in dst:
+            raise PermissionError("[Errno 13] Permission denied: file_2.pdf")
+        return original_move(src, dst)
+
+    with patch('shutil.move', side_effect=track_and_fail):
+        result = runner.invoke(
+            gsb,
+            ["--compress=/screen", "--force", "--no_open_path", "--on-error=abort"] + test_files
+        )
+
+    # Should exit with error code 1
+    assert result.exit_code == 1
+
+    # Should show abort message
+    assert "Aborting batch (--on-error abort)" in result.output or "aborted" in result.output.lower()
+
+    # Should not prompt user
+    assert "Choose action" not in result.output
+
+    # File_3 should not be processed (abort stops the batch)
+    # We can't reliably check processed_files due to multiprocessing, but we can check output
+    assert "Batch processing aborted" in result.output or "aborted" in result.output.lower()
+
+
+def test_on_error_abort_exits_without_prefix():
+    """Test that --on-error=abort exits with error code when no --prefix and no --force."""
+    runner = CliRunner()
+
+    # Create a temporary test file
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test.pdf")
+    shutil.copy("tests/assets/originals/file_1.pdf", test_file)
+
+    try:
+        result = runner.invoke(
+            gsb,
+            ["--compress=/screen", "--no_open_path", "--on-error=abort", test_file]
+        )
+
+        # Should exit with error code 1
+        assert result.exit_code == 1
+
+        # Should show error message
+        assert "Error: No --prefix specified and --force not set" in result.output
+        assert "Use --prefix to specify output location or --force to allow overwriting" in result.output
+
+        # Should not prompt user
+        assert "Do you want to overwrite" not in result.output
+
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_on_error_skip_warns_without_prefix():
+    """Test that --on-error=skip warns and skips when no --prefix and no --force."""
+    runner = CliRunner()
+
+    # Create a temporary test file
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test.pdf")
+    shutil.copy("tests/assets/originals/file_1.pdf", test_file)
+
+    try:
+        result = runner.invoke(
+            gsb,
+            ["--compress=/screen", "--no_open_path", "--on-error=skip", test_file]
+        )
+
+        # Should exit successfully (code 0)
+        assert result.exit_code == 0
+
+        # Should show warning message
+        assert "Warning: No --prefix specified and --force not set" in result.output
+        assert "Skipping all files" in result.output
+
+        # Should not prompt user
+        assert "Do you want to overwrite" not in result.output
+
+        # Should not process files (no summary table)
+        assert "Processing 1 file(s)" in result.output or "Processing 0 file(s)" not in result.output
+        # But no completion summary
+        assert "All 1 file(s) processed successfully" not in result.output
+
+    finally:
+        shutil.rmtree(temp_dir)

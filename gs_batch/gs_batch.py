@@ -116,6 +116,13 @@ def get_epilog() -> str:
     default=False,
     help="Recursively search directories for files matching --filter extension(s).",
 )
+@click.option(
+    "--on-error",
+    default="prompt",
+    type=click.Choice(["prompt", "skip", "abort"]),
+    show_default=True,
+    help="Action on file errors: [prompt] user interactively, skip failed files and continue, or abort on first error.",
+)
 @click.argument("files", nargs=-1, type=str)
 def gs_batch(
     options: str,
@@ -130,11 +137,12 @@ def gs_batch(
     filter: str,
     verbose: bool,
     recursive: bool,
+    on_error: str,
 ) -> None:
     """CLI wrapper for gs_batch_impl - see help parameter in @click.command decorator."""
     return _gs_batch_impl(
         options, prefix, suffix, compress, pdfa, files,
-        keep_smaller, force, open_path, filter, verbose, recursive
+        keep_smaller, force, open_path, filter, verbose, recursive, on_error
     )
 
 
@@ -151,6 +159,7 @@ def _gs_batch_impl(
     filter: str,
     verbose: bool,
     recursive: bool,
+    on_error: str,
 ) -> None:
     """Batch process PDF files with Ghostscript for compression or PDF/A conversion.
 
@@ -181,6 +190,10 @@ def _gs_batch_impl(
         verbose: If True, display detailed command output and progress information.
         recursive: If True, recursively search directories for files matching filter.
                    If False, only process files in the top level of directories.
+        on_error: Action to take on file errors. One of:
+                  - 'prompt': Interactively prompt user (default, existing behavior)
+                  - 'skip': Skip failed files and continue processing
+                  - 'abort': Stop processing on first error
 
     Returns:
         None. Prints summary table and processing results to stdout.
@@ -229,26 +242,35 @@ def _gs_batch_impl(
 
     # overwriting alert
     if not prefix and not force:
-        click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
-        click.secho(
-            " Original files may be overwritten if no `--prefix` is specified",
-            bold=True,
-            fg="red",
-        )
-        click.secho(
-            "(Use the `--force` flag to allow overwriting original files and skip this messages)",
-            fg="black",
-        )
-        response = click.prompt(
-            "Do you want to overwrite original files?",
-            default="n",
-            type=click.Choice(["y", "n"]),
-        )
-        if response == "y":
-            force = True
-        else:
-            click.echo("Aborting...")
+        if on_error == "abort":
+            click.secho("Error: No --prefix specified and --force not set", fg="red", err=True)
+            click.secho("Use --prefix to specify output location or --force to allow overwriting", err=True)
+            sys.exit(1)
+        elif on_error == "skip":
+            click.secho("Warning: No --prefix specified and --force not set", fg="yellow", err=True)
+            click.secho("Skipping all files (use --force to allow overwriting or --prefix for output location)", fg="yellow", err=True)
             return
+        else:  # prompt
+            click.secho("**WARNINGS:**", bold=True, blink=True, bg="red", nl=False)
+            click.secho(
+                " Original files may be overwritten if no `--prefix` is specified",
+                bold=True,
+                fg="red",
+            )
+            click.secho(
+                "(Use the `--force` flag to allow overwriting original files and skip this messages)",
+                fg="black",
+            )
+            response = click.prompt(
+                "Do you want to overwrite original files?",
+                default="n",
+                type=click.Choice(["y", "n"]),
+            )
+            if response == "y":
+                force = True
+            else:
+                click.echo("Aborting...")
+                return
 
     # Command building logic
     command_parts = []
@@ -283,7 +305,7 @@ def _gs_batch_impl(
 
     # Prepare file processing tasks
     file_tasks = [
-        (id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose)
+        (id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error)
         for id, pdf_file in enumerate(files)
     ]
 
@@ -700,7 +722,7 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
     return True 
     
 
-def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool, bool, bool]) -> Dict[str, Any]:
+def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool, bool, bool, str]) -> Dict[str, Any]:
     """Process a single PDF file with Ghostscript.
 
     Processes a PDF file using Ghostscript with specified compression or PDF/A
@@ -708,7 +730,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
 
     Args:
         file_info: Tuple containing (id, pdf_file, command_parts, first_argument,
-                   prefix, suffix, keep_smaller, force, verbose) where:
+                   prefix, suffix, keep_smaller, force, verbose, on_error) where:
                    - id: Task identifier for progress tracking
                    - pdf_file: Path to input PDF file
                    - command_parts: Ghostscript command arguments
@@ -718,6 +740,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
                    - keep_smaller: If True, keep smaller file; if False, keep new file
                    - force: If True, allow overwriting original files
                    - verbose: If True, show detailed command output
+                   - on_error: Action on file errors ('prompt', 'skip', or 'abort')
 
     Returns:
         Dictionary containing processing results with keys:
@@ -731,14 +754,15 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
         - 'suffix': Output filename suffix
         - 'keep_smaller': Whether to keep smaller file
         - 'force': Whether to force overwrite
+        - 'on_error': Action on file errors
 
     Example:
-        >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False)
+        >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False, "prompt")
         >>> result = process_file(task)
         >>> print(result['status'])
         success
     """
-    id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose = file_info
+    id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error = file_info
 
     original_size = os.path.getsize(pdf_file)
 
@@ -769,6 +793,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
             'suffix': suffix,
             'keep_smaller': keep_smaller,
             'force': force,
+            'on_error': on_error,
         }
     else:
         # GS failed - cleanup temp file
@@ -787,6 +812,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
             'suffix': suffix,
             'keep_smaller': keep_smaller,
             'force': force,
+            'on_error': on_error,
         }
 
 
@@ -846,37 +872,51 @@ def get_error_suggestion(e: Exception) -> str:
     return "Check file permissions and available disk space"
 
 
-def prompt_retry_skip_abort(filename: str, error: Exception) -> str:
+def prompt_retry_skip_abort(filename: str, error: Exception, on_error: str) -> str:
     """
-    Prompt user for action on recoverable error.
+    Prompt user for action on recoverable error, or auto-respond based on on_error mode.
+
+    Args:
+        filename: Name of file being processed
+        error: The exception that occurred
+        on_error: Action mode ('prompt', 'skip', or 'abort')
 
     Returns: 'retry' | 'skip' | 'abort'
     """
-    click.secho(f"\nError processing '{os.path.basename(filename)}':", fg="yellow")
-    click.echo(f"  {error}")
+    if on_error == "skip":
+        click.secho(f"\nError processing '{os.path.basename(filename)}': {error}", fg="yellow")
+        click.echo("  Skipping file (--on-error skip)")
+        return "skip"
+    elif on_error == "abort":
+        click.secho(f"\nError processing '{os.path.basename(filename)}': {error}", fg="red")
+        click.echo("  Aborting batch (--on-error abort)")
+        return "abort"
+    else:  # prompt
+        click.secho(f"\nError processing '{os.path.basename(filename)}':", fg="yellow")
+        click.echo(f"  {error}")
 
-    suggestion = get_error_suggestion(error)
-    if suggestion:
-        click.echo(f"  Suggestion: {suggestion}")
+        suggestion = get_error_suggestion(error)
+        if suggestion:
+            click.echo(f"  Suggestion: {suggestion}")
 
-    # Display options with explanations
-    click.echo("\nAvailable actions:")
-    click.echo("  [r]etry  - Try the operation again (after fixing the issue)")
-    click.echo("  [s]kip   - Skip this file and continue with the next one")
-    click.echo("  [a]bort  - Stop processing all files and exit")
+        # Display options with explanations
+        click.echo("\nAvailable actions:")
+        click.echo("  [r]etry  - Try the operation again (after fixing the issue)")
+        click.echo("  [s]kip   - Skip this file and continue with the next one")
+        click.echo("  [a]bort  - Stop processing all files and exit")
 
-    response = click.prompt(
-        "\nChoose action",
-        type=click.Choice(['r', 's', 'a'], case_sensitive=False),
-        default='r',
-        show_default=True
-    )
+        response = click.prompt(
+            "\nChoose action",
+            type=click.Choice(['r', 's', 'a'], case_sensitive=False),
+            default='r',
+            show_default=True
+        )
 
-    action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
-    return action_map[response.lower()]
+        action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
+        return action_map[response.lower()]
 
 
-def retry_file_operation(operation, filename: str, op_type: str) -> None:
+def retry_file_operation(operation, filename: str, op_type: str, on_error: str) -> None:
     """
     Execute file operation with unlimited retry on recoverable errors.
 
@@ -884,6 +924,7 @@ def retry_file_operation(operation, filename: str, op_type: str) -> None:
         operation: Callable that performs the file operation
         filename: Filename for error messages
         op_type: Type of operation for error messages ('copy', 'move', 'overwrite')
+        on_error: Action mode ('prompt', 'skip', or 'abort')
 
     Raises:
         AbortBatchProcessing: If user chooses to abort
@@ -896,7 +937,7 @@ def retry_file_operation(operation, filename: str, op_type: str) -> None:
 
         except (PermissionError, OSError) as e:
             if is_recoverable_error(e):
-                action = prompt_retry_skip_abort(filename, e)
+                action = prompt_retry_skip_abort(filename, e, on_error)
 
                 if action == 'retry':
                     continue  # Loop to retry
@@ -930,6 +971,7 @@ def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
     suffix = gs_result['suffix']
     keep_smaller = gs_result['keep_smaller']
     force = gs_result['force']
+    on_error = gs_result['on_error']
 
     # Calculate output path (extracted from current move_output logic)
     root = os.path.dirname(original_file)
@@ -976,7 +1018,8 @@ def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
                 retry_file_operation(
                     lambda: shutil.copy(original_file, output_file),
                     output_file,
-                    "copy"
+                    "copy",
+                    on_error
                 )
                 cleanup_temp_file(temp_file)
 
@@ -986,7 +1029,8 @@ def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
                     retry_file_operation(
                         lambda: shutil.move(temp_file, output_file),
                         output_file,
-                        "overwrite"
+                        "overwrite",
+                        on_error
                     )
                 else:
                     # This should not happen (already handled in main), but safety check
@@ -999,7 +1043,8 @@ def finalize_output(gs_result: Dict[str, Any]) -> Dict[str, Any]:
                 retry_file_operation(
                     lambda: shutil.move(temp_file, output_file),
                     output_file,
-                    "move"
+                    "move",
+                    on_error
                 )
 
     except AbortBatchProcessing:
