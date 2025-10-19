@@ -21,4 +21,7 @@ build/
 .pytest_cache/
 
 # claude
-.claude
+.claude/
+
+# Temporary files
+tests/assets/output/

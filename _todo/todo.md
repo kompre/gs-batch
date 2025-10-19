@@ -4,18 +4,23 @@
 
 <!-- Add tasks here. When creating a proposal, move the task description to the proposal file -->
 
-### CI/CD Workflows: Build, Test, and PyPI Publishing
-**Status:** In Development
-**Details:** `_todo/pending/cicd-workflows.md`
-**Priority:** High
-**Branch:** `feature/cicd-workflows`
-**Objective:** Set up GitHub Actions workflows for automated testing, building, and publishing to PyPI with version management that ensures main branch reflects published package state.
+### Handle File Locking and Permission Errors
+**Status:** Proposal created - awaiting review
+**Proposal:** `_todo/proposal/handle-file-locking.md`
+**Priority:** Medium
+**Objective:** Handle gracefully files locked by another process and permission errors during file write/move operations to prevent crashes in real-world usage.
 
 ### Test coverage
 **Status:** Proposal created - awaiting review
 **Proposal:** `_todo/proposal/add-tests.md`
 
 ## Completed Tasks
+
+### CI/CD Workflows: Build, Test, and PyPI Publishing
+**Status:** ✅ Completed (2025-10-16)
+**Details:** `_todo/completed/2025-10-16/cicd-workflows.md`
+**Release:** v0.5.6 - First production release to PyPI
+**Summary:** Complete CI/CD system with optimized workflows (85% faster), automated releases, branch protection, and comprehensive documentation. Production-tested with successful releases to both TestPyPI and PyPI.
 
 ### Improve documentation
 **Status:** ✅ Completed (2025-10-11)
