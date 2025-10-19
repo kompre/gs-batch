@@ -12,7 +12,14 @@
       "Bash(uv run pytest:*)",
       "Bash(git stash:*)",
       "Bash(git commit:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Read(//c/Users/s.follador/.claude/**)",
+      "Bash(uv run python:*)",
+      "Bash(gh pr create:*)",
+      "Bash(uv run:*)",
+      "Bash(gh label list:*)",
+      "Bash(cat \"C:\\Users\\s.follador\\.claude\\agents\\setup-pypi-publishing.md\")",
+      "Bash(git fetch origin main)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,14 @@
+---
+format: pdf
+title: "Test PDF"
+---
+
+# This is a test PDF
+
+![very large image](img/tulips.jpg)
+
+{{< lipsum >}}
+
+![very large image](img/white_sands.jpg)
+
+{{< lipsum >}}
