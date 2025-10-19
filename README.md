@@ -9,6 +9,7 @@ A command-line tool for batch processing PDF files using [Ghostscript](https://w
 - **PDF/A Conversion**: Support for PDF/A-1, PDF/A-2, and PDF/A-3 standards[^1]
 - **Recursive Search**: Process entire directory trees with the `-r` flag
 - **Smart File Management**: Keep smaller files automatically or always keep new versions
+- **Error Handling**: Configurable error behavior (prompt, skip, or abort)
 - **Custom Ghostscript Options**: Full access to Ghostscript's command-line options
 - **Progress Tracking**: Real-time progress bars for each file being processed
 - **Flexible Output**: Add prefixes/suffixes to output filenames, organize into folders
@@ -113,6 +114,13 @@ gsb *.pdf --compress --pdfa --prefix "processed_"
 
 - `-r, --recursive`: Search directories recursively
   - Without this flag, only processes files in top-level directories
+
+#### Error Handling Options
+
+- `--on-error [MODE]`: Control behavior when file processing errors occur
+  - `prompt` (default): Interactively ask user whether to retry, skip, or abort
+  - `skip`: Automatically skip failed files and continue processing
+  - `abort`: Stop processing immediately on first error
 
 #### Other Options
 
@@ -244,12 +252,42 @@ Combine compression with custom options:
 gsb report.pdf --compress /printer --options "-dCompatibilityLevel=1.7"
 ```
 
+### Error Handling
+
+Interactive error handling (default):
+
+```bash
+# Prompts user on each error to retry, skip, or abort
+gsb . -r --compress
+```
+
+Skip failed files automatically:
+
+```bash
+# Useful for batch processing where some files may be corrupted
+gsb . -r --compress --on-error skip
+```
+
+Abort on first error:
+
+```bash
+# Stops immediately if any file fails (useful for CI/CD)
+gsb *.pdf --compress --on-error abort
+```
+
 ### Scripting and Automation
 
 Silent processing for scripts:
 
 ```bash
 gsb *.pdf --compress --force --no_open_path
+```
+
+Automated batch with error skipping:
+
+```bash
+# Best for unattended processing
+gsb . -r --compress --force --no_open_path --on-error skip
 ```
 
 Verbose output for debugging:
