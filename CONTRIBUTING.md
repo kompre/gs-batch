@@ -81,27 +81,46 @@ If CI fails, check the workflow logs in GitHub Actions to see which tests failed
 
 ## Release Process
 
-Releases are automated through GitHub Actions using label-triggered version bumping. Only maintainers can create releases.
+Releases are automated through GitHub Actions. Only maintainers can create releases.
 
 ### For Maintainers: Creating a Release
 
-**Important:** You do NOT need to manually edit version numbers! The workflow automatically bumps the version using `uv version --bump`.
+**Important:** Bump the version using `uv version --bump` before creating your release PR.
 
-1. **Create a release PR** with your changes:
+1. **Create a feature branch** with your changes:
    ```bash
-   git checkout -b release/add-feature-x
+   git checkout -b feature/add-feature-x
    # or
-   git checkout -b release/fix-bug-y
+   git checkout -b fix/bug-y
    ```
 
-2. **Make your changes and commit** (NO version editing needed!)
+2. **Make your changes and commit:**
    ```bash
    git add .
    git commit -m "Add feature X"
-   # Note: Do NOT edit pyproject.toml version
    ```
 
-3. **Write a comprehensive PR description** (becomes release notes):
+3. **Bump the version** based on your changes:
+   ```bash
+   # For stable releases (publishes to Production PyPI):
+   uv version --bump major      # Breaking changes (1.2.3 → 2.0.0)
+   uv version --bump minor      # New features (1.2.3 → 1.3.0)
+   uv version --bump patch      # Bug fixes (1.2.3 → 1.2.4)
+
+   # For pre-releases (publishes to TestPyPI):
+   uv version --bump minor --bump rc     # Release candidate (0.5.6 → 0.6.0rc1)
+   uv version --bump patch --bump beta   # Beta (0.5.6 → 0.5.7b1)
+   uv version --bump major --bump alpha  # Alpha (0.5.6 → 1.0.0a1)
+   uv version --bump patch --bump dev    # Development (0.5.6 → 0.5.7.dev1)
+   ```
+
+4. **Commit the version bump:**
+   ```bash
+   git add pyproject.toml uv.lock
+   git commit -m "chore: bump version to $(uv version --short)"
+   ```
+
+5. **Write a comprehensive PR description** (becomes release notes):
    ```markdown
    Title: Add feature X / Fix bug Y
 
@@ -120,54 +139,41 @@ Releases are automated through GitHub Actions using label-triggered version bump
    Steps users need to take to upgrade (if any)
    ```
 
-4. **Create the pull request** on GitHub
+6. **Create the pull request** on GitHub
 
-5. **Add release labels** to the PR (REQUIRED):
+7. **Add `release` label** to the PR
+   - This is the only required label
+   - The workflow automatically detects PyPI target from version string (rc/alpha/beta/dev → TestPyPI, otherwise → PyPI)
 
-   **Required labels:**
-   - `release` - Triggers the release workflow
-   - **Bump type labels** (choose based on changes):
-
-     **Production PyPI (stable releases - one label):**
-       - `bump:major` - Breaking changes (1.2.3 → 2.0.0)
-       - `bump:minor` - New features, backward compatible (1.2.3 → 1.3.0)
-       - `bump:patch` - Bug fixes only (1.2.3 → 1.2.4)
-       - `bump:stable` - Remove pre-release suffix (1.2.4rc1 → 1.2.4)
-       - `bump:post` - Post-release for documentation/packaging fixes (1.2.4 → 1.2.4.post1)
-
-     **TestPyPI (pre-releases - TWO labels required):**
-       - `bump:minor` + `bump:rc` - Release candidate for new feature (0.5.6 → 0.6.0rc1)
-       - `bump:patch` + `bump:beta` - Beta for bugfix (0.5.6 → 0.5.7b1)
-       - `bump:major` + `bump:alpha` - Alpha for breaking changes (0.5.6 → 1.0.0a1)
-       - `bump:patch` + `bump:dev` - Development snapshot (0.5.6 → 0.5.7.dev1)
-
-   **Examples:**
-   - For a new feature release: add labels `release` + `bump:minor` → publishes to production PyPI
-   - For testing a new feature first: add labels `release` + `bump:minor` + `bump:rc` → publishes to TestPyPI as RC
-
-6. **Get approval and merge**
+8. **Get approval and merge**
    - CI will run all tests
    - Once approved, merge the PR
 
-7. **Automated publishing** (happens automatically after merge):
-   - ✅ Workflow extracts bump type(s) from labels
-   - ✅ Automatically determines target (PyPI or TestPyPI) based on bump type
-   - ✅ Runs `uv version --bump <type>` (one or two `--bump` flags) to update `pyproject.toml`
-   - ✅ Creates a version bump PR to main branch
-   - ✅ Enables auto-merge on the version bump PR
-   - ✅ Waits for CI to pass on version bump PR
-   - ✅ Auto-merges version bump to main
-   - ✅ Creates Git tag (e.g., `v0.6.0rc1`) from updated main
+9. **Automated publishing** (happens automatically after merge):
+   - ✅ Extracts version from `pyproject.toml`
+   - ✅ Determines target from version (rc/alpha/beta/dev → TestPyPI, else → PyPI)
+   - ✅ Creates Git tag (e.g., `v0.6.0`)
    - ✅ Builds wheel and source distribution
-   - ✅ Publishes to correct PyPI (production for stable, TestPyPI for pre-releases)
+   - ✅ Publishes to appropriate PyPI
    - ✅ Creates GitHub Release with your PR description
    - ✅ Attaches build artifacts to release
 
-**That's it!** The version is automatically bumped and published to the correct PyPI based on bump type(s).
+**That's it!** The package is automatically published to the correct PyPI based on version string.
 
-> **Note:** After release, you'll see two additional items:
-> - An automated PR (merged) with the version bump
-> - One additional commit on main containing the version bump
+### If You Forgot to Bump the Version
+
+If you merged without bumping the version, the workflow will fail with a "tag already exists" error. To fix:
+
+```bash
+# Bump version on main
+git checkout main
+git pull
+uv version --bump patch  # or minor, major, etc.
+git commit -am "chore: bump version to $(uv version --short)"
+git push
+
+# Go to GitHub Actions and click "Re-run failed jobs"
+```
 
 ### Installing from TestPyPI
 
@@ -184,95 +190,63 @@ We follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
 
 **Standard Releases:**
 - **MAJOR** (`1.0.0` → `2.0.0`): Breaking changes, incompatible API changes
-  - Use label: `bump:major`
+  - Command: `uv version --bump major`
 - **MINOR** (`0.5.0` → `0.6.0`): New features, backward compatible
-  - Use label: `bump:minor`
+  - Command: `uv version --bump minor`
 - **PATCH** (`0.5.5` → `0.5.6`): Bug fixes, no new features
-  - Use label: `bump:patch`
+  - Command: `uv version --bump patch`
 
 **Pre-releases (for testing before production):**
 - **Alpha** (`0.6.0a1`): Early testing version
-  - Use labels: `bump:minor` + `bump:alpha` (or `bump:patch`/`bump:major` + `bump:alpha`)
+  - Command: `uv version --bump minor --bump alpha` (or `patch`/`major` + `alpha`)
 - **Beta** (`0.6.0b1`): Feature-complete, testing for bugs
-  - Use labels: `bump:minor` + `bump:beta` (or `bump:patch`/`bump:major` + `bump:beta`)
+  - Command: `uv version --bump minor --bump beta` (or `patch`/`major` + `beta`)
 - **Release Candidate** (`0.6.0rc1`): Final testing before release
-  - Use labels: `bump:minor` + `bump:rc` (or `bump:patch`/`bump:major` + `bump:rc`)
+  - Command: `uv version --bump minor --bump rc` (or `patch`/`major` + `rc`)
 - **Dev release** (`0.5.7.dev1`): Development snapshots
-  - Use labels: `bump:patch` + `bump:dev` (or `bump:minor`/`bump:major` + `bump:dev`)
-- **Stabilize** (`0.6.0rc1` → `0.6.0`): Remove pre-release suffix
-  - Use label: `bump:stable`
+  - Command: `uv version --bump patch --bump dev` (or `minor`/`major` + `dev`)
 
-**Special cases:**
-- **Post-release** (`0.5.6.post1`): Documentation or packaging fixes
-  - Use label: `bump:post`
+**Version bumping examples:**
+```bash
+# Standard releases
+uv version --bump patch    # 0.5.6 → 0.5.7
+uv version --bump minor    # 0.5.7 → 0.6.0
+uv version --bump major    # 0.6.0 → 1.0.0
 
-### How Version Bumping Works
-
-The workflow uses `uv version --bump <type>` which automatically:
-- Reads the current version from `pyproject.toml`
-- Calculates the next version based on bump type(s)
-- Updates `pyproject.toml` with the new version
-- Commits the change to main branch
-
-**For pre-releases**, `uv` requires TWO `--bump` flags: one for the version component and one for the pre-release type. The workflow handles this automatically when you provide two labels.
-
-**Examples:**
-- Current: `0.5.6rc2` + `bump:stable` → `0.5.7`
-- Current: `0.5.7` + `bump:patch` → `0.5.8`
-- Current: `0.5.7` + `bump:minor` → `0.6.0`
-- Current: `0.5.6` + `bump:minor` + `bump:rc` → `0.6.0rc1`
-- Current: `0.5.6` + `bump:patch` + `bump:beta` → `0.5.7b1`
-- Current: `0.5.6` + `bump:major` + `bump:alpha` → `1.0.0a1`
+# Pre-releases
+uv version --bump minor --bump rc     # 0.5.6 → 0.6.0rc1
+uv version --bump patch --bump beta   # 0.5.6 → 0.5.7b1
+uv version --bump major --bump alpha  # 0.5.6 → 1.0.0a1
+```
 
 ### Automatic Target Selection
 
-**The workflow automatically determines where to publish based on your bump type labels:**
+**The workflow automatically determines where to publish based on version string:**
 
 **Production PyPI (https://pypi.org):**
-- Single labels: `bump:major`, `bump:minor`, `bump:patch`, `bump:stable`, `bump:post`
-- These are stable releases meant for production use
+- Version does not contain: `rc`, `alpha`, `beta`, `dev`, `a[0-9]`, `b[0-9]`
+- Examples: `0.5.7`, `0.6.0`, `1.0.0`, `0.5.7.post1`
 - Users install with: `pip install gs-batch-pdf`
 
 **TestPyPI (https://test.pypi.org):**
-- Dual labels with pre-release types: `bump:rc`, `bump:alpha`, `bump:beta`, `bump:dev`
-- Examples: `bump:minor` + `bump:rc`, `bump:patch` + `bump:beta`
-- These are pre-releases for testing only
+- Version contains pre-release identifiers: `rc`, `alpha`, `beta`, `dev`, `a[0-9]`, `b[0-9]`
+- Examples: `0.6.0rc1`, `0.5.7b1`, `1.0.0a1`, `0.5.7.dev1`
 - Users install with: `pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf`
 
-**Benefits of this policy:**
+**Benefits:**
 - ✅ Impossible to accidentally publish pre-releases to production
-- ✅ No need for manual target selection
 - ✅ Clear separation between testing and production
-- ✅ Bump type directly implies stability level
-- ✅ Pre-releases require explicit version component bump
+- ✅ Version string directly implies target
 
 ### Troubleshooting Releases
 
-**If workflow fails due to missing bump label:**
-- Error message will list required labels
-- Add the appropriate `bump:X` label to your PR
-- The workflow only runs on merge, so you may need to close and reopen the PR to trigger it again
-
 **If tag already exists:**
-The workflow will fail with a clear error. To fix:
-```bash
-# Delete local and remote tag if needed
-git tag -d v0.5.7
-git push origin :refs/tags/v0.5.7
-# Then trigger workflow again or manually create a new release
-```
-
-**If version bump PR doesn't auto-merge:**
-- Check that branch protection allows auto-merge
-- Verify CI is passing on the version bump PR
-- Check GitHub Actions logs for permission errors
-- The workflow will wait up to 5 minutes for auto-merge to complete
+The workflow will fail with a clear error. See "If You Forgot to Bump the Version" section above.
 
 **If PyPI publish fails:**
 - Check workflow logs in GitHub Actions
-- Verify PyPI Trusted Publishing is configured
+- Verify PyPI Trusted Publishing is configured for the repository
 - Ensure version doesn't already exist on PyPI (versions can't be re-uploaded)
-- Check that bump type label was correctly applied
 
 **If release was incorrect:**
 - PyPI packages cannot be deleted (policy)
