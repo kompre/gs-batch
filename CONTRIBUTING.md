@@ -153,8 +153,11 @@ Releases are automated through GitHub Actions using label-triggered version bump
    - ✅ Workflow extracts bump type(s) from labels
    - ✅ Automatically determines target (PyPI or TestPyPI) based on bump type
    - ✅ Runs `uv version --bump <type>` (one or two `--bump` flags) to update `pyproject.toml`
-   - ✅ Commits version change to main with `[skip ci]`
-   - ✅ Creates Git tag (e.g., `v0.6.0rc1`)
+   - ✅ Creates a version bump PR to main branch
+   - ✅ Enables auto-merge on the version bump PR
+   - ✅ Waits for CI to pass on version bump PR
+   - ✅ Auto-merges version bump to main
+   - ✅ Creates Git tag (e.g., `v0.6.0rc1`) from updated main
    - ✅ Builds wheel and source distribution
    - ✅ Publishes to correct PyPI (production for stable, TestPyPI for pre-releases)
    - ✅ Creates GitHub Release with your PR description
@@ -162,7 +165,9 @@ Releases are automated through GitHub Actions using label-triggered version bump
 
 **That's it!** The version is automatically bumped and published to the correct PyPI based on bump type(s).
 
-> **Note:** After merge, main branch will have one additional commit containing the version bump.
+> **Note:** After release, you'll see two additional items:
+> - An automated PR (merged) with the version bump
+> - One additional commit on main containing the version bump
 
 ### Installing from TestPyPI
 
@@ -257,10 +262,11 @@ git push origin :refs/tags/v0.5.7
 # Then trigger workflow again or manually create a new release
 ```
 
-**If branch protection blocks version commit:**
-- Configure branch protection to allow `github-actions[bot]` to push
-- Or adjust protection rules to only apply to PRs, not direct pushes from workflows
+**If version bump PR doesn't auto-merge:**
+- Check that branch protection allows auto-merge
+- Verify CI is passing on the version bump PR
 - Check GitHub Actions logs for permission errors
+- The workflow will wait up to 5 minutes for auto-merge to complete
 
 **If PyPI publish fails:**
 - Check workflow logs in GitHub Actions

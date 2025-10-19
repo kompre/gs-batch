@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: write  # Create releases, tags, and commit version bumps
       id-token: write  # OIDC for PyPI Trusted Publishing
+      pull-requests: write  # Create and merge version bump PRs
 
     steps:
       - name: Checkout main branch
@@ -172,11 +173,15 @@ jobs:
 
           echo "✅ Bumped to: $NEW_VERSION"
 
-      - name: Commit version bump to main
+      - name: Create version bump PR and auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          NEW_VERSION="${{ steps.bump_version.outputs.version }}"
+          BRANCH_NAME="release/bump-to-v$NEW_VERSION"
           BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
           BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
 
@@ -186,16 +191,79 @@ jobs:
             BUMP_DESCRIPTION="$BUMP_TYPE_1"
           fi
 
+          # Create and push branch with version bump
+          git checkout -b "$BRANCH_NAME"
           git add pyproject.toml uv.lock
-          git commit -m "chore: bump version to ${{ steps.bump_version.outputs.version }} [skip ci]
+          git commit -m "chore: bump version to $NEW_VERSION
 
           Automated version bump from merged PR #${{ github.event.pull_request.number }}
           Bump type: $BUMP_DESCRIPTION
 
           Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>"
 
-          git push origin main
-          echo "✅ Committed version bump to main"
+          git push origin "$BRANCH_NAME"
+
+          # Create PR and enable auto-merge
+          gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "chore: bump version to $NEW_VERSION" \
+            --body "Automated version bump to $NEW_VERSION
+
+          **Bump type:** $BUMP_DESCRIPTION
+          **Triggered by:** PR #${{ github.event.pull_request.number }}
+
+          This PR will auto-merge once CI passes." \
+            --label "automated"
+
+          # Enable auto-merge (will merge when CI passes)
+          gh pr merge "$BRANCH_NAME" --auto --squash
+
+          echo "✅ Created version bump PR, waiting for CI and auto-merge"
+
+      - name: Wait for version bump to merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ steps.bump_version.outputs.version }}"
+          BRANCH_NAME="release/bump-to-v$NEW_VERSION"
+
+          echo "⏳ Waiting for version bump PR to merge..."
+
+          # Wait for PR to be merged (poll every 10 seconds, max 5 minutes)
+          for i in {1..30}; do
+            PR_STATE=$(gh pr view "$BRANCH_NAME" --json state --jq .state 2>/dev/null || echo "NOTFOUND")
+
+            if [ "$PR_STATE" = "MERGED" ]; then
+              echo "✅ Version bump PR merged successfully"
+              break
+            elif [ "$PR_STATE" = "CLOSED" ]; then
+              echo "❌ Version bump PR was closed without merging"
+              exit 1
+            elif [ "$PR_STATE" = "NOTFOUND" ]; then
+              echo "❌ Version bump PR not found"
+              exit 1
+            fi
+
+            echo "⏳ PR still open, waiting for CI to pass... ($i/30)"
+            sleep 10
+          done
+
+          # Final verification
+          PR_STATE=$(gh pr view "$BRANCH_NAME" --json state --jq .state 2>/dev/null || echo "NOTFOUND")
+          if [ "$PR_STATE" != "MERGED" ]; then
+            echo "❌ Version bump PR did not merge within 5 minutes"
+            echo "Current state: $PR_STATE"
+            exit 1
+          fi
+
+          echo "✅ Version bump successfully merged to main"
+
+      - name: Checkout updated main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Check if tag already exists
         run: |
