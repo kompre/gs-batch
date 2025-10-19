@@ -22,3 +22,6 @@ build/
 
 # claude
 .claude/
+
+# Temporary files
+tests/assets/output/
