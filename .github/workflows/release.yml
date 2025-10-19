@@ -16,9 +16,8 @@ jobs:
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Create releases, tags, and commit version bumps
+      contents: write  # Create releases and tags
       id-token: write  # OIDC for PyPI Trusted Publishing
-      pull-requests: write  # Create and merge version bump PRs
 
     steps:
       - name: Checkout main branch
@@ -26,7 +25,6 @@ jobs:
         with:
           ref: main
           fetch-depth: 0  # Full history for proper tagging
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -36,265 +34,65 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Extract bump type from labels
-        id: bump_type
+      - name: Extract version from pyproject.toml
+        id: version
         run: |
-          # Get all PR labels as JSON array
-          LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
-          echo "📋 PR Labels: $LABELS"
+          VERSION=$(uv version --short)
+          TAG="v$VERSION"
 
-          # Extract all bump labels
-          BUMP_LABELS=$(echo "$LABELS" | jq -r '.[] | select(startswith("bump:")) | sub("bump:"; "")')
-          BUMP_COUNT=$(echo "$BUMP_LABELS" | wc -w)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-          echo "Found $BUMP_COUNT bump label(s): $BUMP_LABELS"
+          echo "📦 Version: $VERSION"
+          echo "🏷️  Tag: $TAG"
 
-          # Define categories
-          VERSION_COMPONENTS="major minor patch"
-          PRERELEASE_TYPES="rc alpha beta dev"
-          STABLE_TYPES="major minor patch stable post"
-
-          # Separate labels by category
-          COMPONENT=""
-          PRERELEASE=""
-          for label in $BUMP_LABELS; do
-            if echo "$VERSION_COMPONENTS" | grep -qw "$label"; then
-              COMPONENT="$label"
-            elif echo "$PRERELEASE_TYPES" | grep -qw "$label"; then
-              PRERELEASE="$label"
-            elif [ "$label" = "stable" ] || [ "$label" = "post" ]; then
-              COMPONENT="$label"
-            fi
-          done
-
-          # Validation
-          if [ $BUMP_COUNT -eq 0 ]; then
-            echo "❌ Error: No bump type label found!"
-            echo ""
-            echo "Required: Add labels to your PR:"
-            echo ""
-            echo "Stable releases (one label) → Production PyPI:"
-            echo "  - bump:major  → Breaking changes (x.0.0)"
-            echo "  - bump:minor  → New features (0.x.0)"
-            echo "  - bump:patch  → Bug fixes (0.0.x)"
-            echo "  - bump:stable → Remove pre-release suffix (1.0.0rc1 → 1.0.0)"
-            echo "  - bump:post   → Post-release (1.0.0 → 1.0.0.post1)"
-            echo ""
-            echo "Pre-releases (two labels) → TestPyPI:"
-            echo "  - bump:minor + bump:rc    → Release candidate (0.5.6 → 0.6.0rc1)"
-            echo "  - bump:patch + bump:beta  → Beta (0.5.6 → 0.5.7b1)"
-            echo "  - bump:major + bump:alpha → Alpha (0.5.6 → 1.0.0a1)"
-            echo "  - bump:patch + bump:dev   → Development (0.5.6 → 0.5.7.dev1)"
-            exit 1
-          elif [ $BUMP_COUNT -eq 1 ]; then
-            # Must be stable type
-            if ! echo "$STABLE_TYPES" | grep -qw "$BUMP_LABELS"; then
-              echo "❌ Error: Single label '$BUMP_LABELS' is not a stable type"
-              echo ""
-              echo "For stable releases, use: major, minor, patch, stable, or post"
-              echo "For pre-releases, add TWO labels: version component + pre-release type"
-              echo "  Example: bump:minor + bump:rc → 0.5.6 → 0.6.0rc1"
-              exit 1
-            fi
-            BUMP_TYPE_1="$BUMP_LABELS"
-            BUMP_TYPE_2=""
-            HAS_PRERELEASE="false"
-            echo "✅ Stable release: $BUMP_TYPE_1"
-          elif [ $BUMP_COUNT -eq 2 ]; then
-            # Must be component + prerelease
-            if [ -z "$COMPONENT" ] || [ -z "$PRERELEASE" ]; then
-              echo "❌ Error: Two labels must be one version component + one pre-release type"
-              echo ""
-              echo "Version components: major, minor, patch"
-              echo "Pre-release types: rc, alpha, beta, dev"
-              echo ""
-              echo "Examples:"
-              echo "  - bump:minor + bump:rc → 0.5.6 → 0.6.0rc1"
-              echo "  - bump:patch + bump:beta → 0.5.6 → 0.5.7b1"
-              exit 1
-            fi
-            BUMP_TYPE_1="$COMPONENT"
-            BUMP_TYPE_2="$PRERELEASE"
-            HAS_PRERELEASE="true"
-            echo "✅ Pre-release: $BUMP_TYPE_1 + $BUMP_TYPE_2"
-          else
-            echo "❌ Error: Too many bump labels ($BUMP_COUNT)"
-            echo "Maximum 2 labels allowed (version component + pre-release type)"
-            exit 1
-          fi
-
-          # Output results
-          echo "bump_type_1=$BUMP_TYPE_1" >> $GITHUB_OUTPUT
-          echo "bump_type_2=$BUMP_TYPE_2" >> $GITHUB_OUTPUT
-          echo "has_prerelease=$HAS_PRERELEASE" >> $GITHUB_OUTPUT
-
-      - name: Determine publish target (automatic based on bump type)
+      - name: Determine publish target from version
         id: target
         run: |
-          HAS_PRERELEASE="${{ steps.bump_type.outputs.has_prerelease }}"
-          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
-          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
+          VERSION="${{ steps.version.outputs.version }}"
 
-          if [ "$HAS_PRERELEASE" = "true" ]; then
-            # Pre-releases (rc, alpha, beta, dev) → TestPyPI
+          # Check if version contains pre-release identifiers
+          if echo "$VERSION" | grep -qE '(rc|alpha|beta|dev|a[0-9]|b[0-9])'; then
+            # Pre-release → TestPyPI
             echo "repository_url=https://test.pypi.org/legacy/" >> $GITHUB_OUTPUT
             echo "target_name=TestPyPI" >> $GITHUB_OUTPUT
             echo "is_production=false" >> $GITHUB_OUTPUT
-            echo "🎯 Target: TestPyPI (pre-release: $BUMP_TYPE_1 + $BUMP_TYPE_2)"
+            echo "🎯 Target: TestPyPI (pre-release detected: $VERSION)"
           else
-            # Stable releases (major, minor, patch, stable, post) → Production PyPI
+            # Stable release → Production PyPI
             echo "repository_url=https://upload.pypi.org/legacy/" >> $GITHUB_OUTPUT
             echo "target_name=PyPI" >> $GITHUB_OUTPUT
             echo "is_production=true" >> $GITHUB_OUTPUT
-            echo "🎯 Target: Production PyPI (stable release: $BUMP_TYPE_1)"
+            echo "🎯 Target: Production PyPI (stable release: $VERSION)"
           fi
 
-      - name: Bump version with uv
-        id: bump_version
+      - name: Check if tag already exists
         run: |
-          echo "📦 Current version: $(uv version --short)"
-
-          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
-          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
-
-          # Bump the version (one or two --bump flags)
-          if [ -n "$BUMP_TYPE_2" ]; then
-            echo "Running: uv version --bump $BUMP_TYPE_1 --bump $BUMP_TYPE_2"
-            uv version --bump $BUMP_TYPE_1 --bump $BUMP_TYPE_2
-          else
-            echo "Running: uv version --bump $BUMP_TYPE_1"
-            uv version --bump $BUMP_TYPE_1
+          if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "❌ Error: Tag ${{ steps.version.outputs.tag }} already exists!"
+            echo ""
+            echo "This version has already been released."
+            echo "If you need to release again:"
+            echo "  1. Bump the version: uv version --bump patch"
+            echo "  2. Commit: git commit -am 'chore: bump version'"
+            echo "  3. Push: git push"
+            echo "  4. Rerun this workflow"
+            exit 1
           fi
+          echo "✅ Tag ${{ steps.version.outputs.tag }} is available"
 
-          # Get new version
-          NEW_VERSION=$(uv version --short)
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-
-          echo "✅ Bumped to: $NEW_VERSION"
-
-      - name: Create version bump PR and auto-merge
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create and push tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          NEW_VERSION="${{ steps.bump_version.outputs.version }}"
-          BRANCH_NAME="release/bump-to-v$NEW_VERSION"
-          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
-          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
-
-          if [ -n "$BUMP_TYPE_2" ]; then
-            BUMP_DESCRIPTION="$BUMP_TYPE_1 + $BUMP_TYPE_2"
-          else
-            BUMP_DESCRIPTION="$BUMP_TYPE_1"
-          fi
-
-          # Create and push branch with version bump
-          git checkout -b "$BRANCH_NAME"
-          git add pyproject.toml uv.lock
-          git commit -m "chore: bump version to $NEW_VERSION
-
-          Automated version bump from merged PR #${{ github.event.pull_request.number }}
-          Bump type: $BUMP_DESCRIPTION
-
-          Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>"
-
-          git push origin "$BRANCH_NAME"
-
-          # Create PR and enable auto-merge
-          gh pr create \
-            --base main \
-            --head "$BRANCH_NAME" \
-            --title "chore: bump version to $NEW_VERSION" \
-            --body "Automated version bump to $NEW_VERSION
-
-          **Bump type:** $BUMP_DESCRIPTION
-          **Triggered by:** PR #${{ github.event.pull_request.number }}
-
-          This PR will auto-merge once CI passes."
-
-          # Try to add label if it exists (don't fail if it doesn't)
-          gh pr edit "$BRANCH_NAME" --add-label "automated" 2>/dev/null || echo "ℹ️ 'automated' label not found, skipping"
-
-          # Enable auto-merge (will merge when CI passes)
-          gh pr merge "$BRANCH_NAME" --auto --squash
-
-          echo "✅ Created version bump PR, waiting for CI and auto-merge"
-
-      - name: Wait for version bump to merge
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.version }}"
-          BRANCH_NAME="release/bump-to-v$NEW_VERSION"
-
-          echo "⏳ Waiting for version bump PR to merge..."
-
-          # Wait for PR to be merged (poll every 10 seconds, max 5 minutes)
-          for i in {1..30}; do
-            PR_STATE=$(gh pr view "$BRANCH_NAME" --json state --jq .state 2>/dev/null || echo "NOTFOUND")
-
-            if [ "$PR_STATE" = "MERGED" ]; then
-              echo "✅ Version bump PR merged successfully"
-              break
-            elif [ "$PR_STATE" = "CLOSED" ]; then
-              echo "❌ Version bump PR was closed without merging"
-              exit 1
-            elif [ "$PR_STATE" = "NOTFOUND" ]; then
-              echo "❌ Version bump PR not found"
-              exit 1
-            fi
-
-            echo "⏳ PR still open, waiting for CI to pass... ($i/30)"
-            sleep 10
-          done
-
-          # Final verification
-          PR_STATE=$(gh pr view "$BRANCH_NAME" --json state --jq .state 2>/dev/null || echo "NOTFOUND")
-          if [ "$PR_STATE" != "MERGED" ]; then
-            echo "❌ Version bump PR did not merge within 5 minutes"
-            echo "Current state: $PR_STATE"
-            exit 1
-          fi
-
-          echo "✅ Version bump successfully merged to main"
-
-      - name: Checkout updated main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Check if tag already exists
-        run: |
-          if git rev-parse "refs/tags/${{ steps.bump_version.outputs.tag }}" >/dev/null 2>&1; then
-            echo "❌ Error: Tag ${{ steps.bump_version.outputs.tag }} already exists!"
-            echo "This version has already been released."
-            exit 1
-          fi
-          echo "✅ Tag ${{ steps.bump_version.outputs.tag }} is available"
-
-      - name: Create and push tag
-        run: |
-          BUMP_TYPE_1="${{ steps.bump_type.outputs.bump_type_1 }}"
-          BUMP_TYPE_2="${{ steps.bump_type.outputs.bump_type_2 }}"
-
-          if [ -n "$BUMP_TYPE_2" ]; then
-            BUMP_DESCRIPTION="$BUMP_TYPE_1 + $BUMP_TYPE_2"
-          else
-            BUMP_DESCRIPTION="$BUMP_TYPE_1"
-          fi
-
-          git tag -a "${{ steps.bump_version.outputs.tag }}" -m "Release version ${{ steps.bump_version.outputs.version }}
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release version ${{ steps.version.outputs.version }}
 
           Released from PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}
-          Bump type: $BUMP_DESCRIPTION
           Target: ${{ steps.target.outputs.target_name }}"
 
-          git push origin "${{ steps.bump_version.outputs.tag }}"
-          echo "✅ Created and pushed tag: ${{ steps.bump_version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+          echo "✅ Created and pushed tag: ${{ steps.version.outputs.tag }}"
 
       - name: Build package
         run: |
@@ -306,6 +104,7 @@ jobs:
           echo ""
           echo "Package details:"
           tar -tzf dist/*.tar.gz | head -20
+
       - name: Publish to PyPI
         if: steps.target.outputs.is_production == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -325,8 +124,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.bump_version.outputs.tag }}
-          name: ${{ steps.target.outputs.is_production == 'true' && format('Release {0}', steps.bump_version.outputs.version) || format('Release {0} (TestPyPI)', steps.bump_version.outputs.version) }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.target.outputs.is_production == 'true' && format('Release {0}', steps.version.outputs.version) || format('Release {0} (TestPyPI)', steps.version.outputs.version) }}
           body: |
             # ${{ github.event.pull_request.title }}
 
@@ -334,8 +133,7 @@ jobs:
 
             ---
 
-            **📦 Version:** `${{ steps.bump_version.outputs.version }}`
-            **🔖 Bump Type:** `${{ steps.bump_type.outputs.bump_type_2 && format('{0} + {1}', steps.bump_type.outputs.bump_type_1, steps.bump_type.outputs.bump_type_2) || steps.bump_type.outputs.bump_type_1 }}`
+            **📦 Version:** `${{ steps.version.outputs.version }}`
             **🎯 Published To:** ${{ steps.target.outputs.target_name }}
 
             ${{ steps.target.outputs.is_production == 'false' && format('⚠️ **This is a test release published to TestPyPI**
@@ -345,10 +143,10 @@ jobs:
             pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ gs-batch-pdf=={0}
             ```
 
-            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/{0}/', steps.bump_version.outputs.version) || format('**PyPI Package:** https://pypi.org/project/gs-batch-pdf/{0}/', steps.bump_version.outputs.version) }}
+            **TestPyPI Package:** https://test.pypi.org/project/gs-batch-pdf/{0}/', steps.version.outputs.version) || format('**PyPI Package:** https://pypi.org/project/gs-batch-pdf/{0}/', steps.version.outputs.version) }}
 
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ steps.bump_version.outputs.tag }}
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ steps.version.outputs.tag }}
           files: dist/*
           draft: false
-          prerelease: ${{ steps.target.outputs.is_production == 'false' || contains(steps.bump_version.outputs.version, 'a') || contains(steps.bump_version.outputs.version, 'b') || contains(steps.bump_version.outputs.version, 'rc') || contains(steps.bump_version.outputs.version, 'dev') }}
+          prerelease: ${{ steps.target.outputs.is_production == 'false' || contains(steps.version.outputs.version, 'a') || contains(steps.version.outputs.version, 'b') || contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'dev') }}
           generate_release_notes: true
