@@ -15,8 +15,7 @@
       "Bash(git branch:*)",
       "Read(//c/Users/s.follador/.claude/**)",
       "Bash(uv run python:*)",
-      "Bash(gh pr create:*)",
-      "Bash(git rm:*)"
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []
