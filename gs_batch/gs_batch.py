@@ -123,6 +123,13 @@ def get_epilog() -> str:
     show_default=True,
     help="Action on file errors: [prompt] user interactively, skip failed files and continue, or abort on first error.",
 )
+@click.option(
+    "--timeout",
+    default=300,
+    type=int,
+    show_default=True,
+    help="Maximum processing time per file in seconds (0 = no timeout).",
+)
 @click.argument("files", nargs=-1, type=str)
 def gs_batch(
     options: str,
@@ -138,11 +145,12 @@ def gs_batch(
     verbose: bool,
     recursive: bool,
     on_error: str,
+    timeout: int,
 ) -> None:
     """CLI wrapper for gs_batch_impl - see help parameter in @click.command decorator."""
     return _gs_batch_impl(
         options, prefix, suffix, compress, pdfa, files,
-        keep_smaller, force, open_path, filter, verbose, recursive, on_error
+        keep_smaller, force, open_path, filter, verbose, recursive, on_error, timeout
     )
 
 
@@ -160,6 +168,7 @@ def _gs_batch_impl(
     verbose: bool,
     recursive: bool,
     on_error: str,
+    timeout: int,
 ) -> None:
     """Batch process PDF files with Ghostscript for compression or PDF/A conversion.
 
@@ -194,6 +203,8 @@ def _gs_batch_impl(
                   - 'prompt': Interactively prompt user (default, existing behavior)
                   - 'skip': Skip failed files and continue processing
                   - 'abort': Stop processing on first error
+        timeout: Maximum processing time per file in seconds. Use 0 for no timeout.
+                 Default: 300 seconds (5 minutes).
 
     Returns:
         None. Prints summary table and processing results to stdout.
@@ -305,7 +316,7 @@ def _gs_batch_impl(
 
     # Prepare file processing tasks
     file_tasks = [
-        (id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error)
+        (id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error, timeout)
         for id, pdf_file in enumerate(files)
     ]
 
@@ -593,19 +604,20 @@ def get_total_page_count(p: subprocess.CompletedProcess) -> int:
         p.stdout.split(" ")[-1].replace(".", "")
     )
 
-def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
-    """Run Ghostscript command with progress tracking.
+def run_ghostscript(id: int, verbose: bool, args: List[str], timeout: float = 300) -> Optional[bool]:
+    """Run Ghostscript command with progress tracking and timeout protection.
 
     Executes Ghostscript on a PDF file while displaying a progress bar that
     tracks page processing. The function first determines the total page count,
     then runs the main Ghostscript command and updates progress as each page
-    is processed.
+    is processed. Includes timeout protection to prevent indefinite hangs.
 
     Args:
         id: Task identifier for progress bar positioning in multiprocessing.
         verbose: If True, prints the full Ghostscript command before execution.
         args: Ghostscript command arguments including output file and input PDF.
               The last argument must be the input PDF path.
+        timeout: Maximum execution time in seconds (default: 300 = 5 minutes).
 
     Returns:
         True if Ghostscript executed successfully, None if an error occurred.
@@ -691,6 +703,9 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
             click.echo("Error: Failed to capture Ghostscript output")
             return None
 
+        start_time = time.time()
+        last_progress_time = start_time
+
         with tqdm(
             total=total_length,
             desc=f"{id+1}) {args[-1]}",
@@ -698,13 +713,44 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
             leave=False,
             colour="green",
         ) as bar:
-            for line_bytes in iter(process.stdout.readline, b""):
-                line = line_bytes.decode("utf-8", errors="ignore")
-                if line.startswith("Page "):
-                    bar.update(1)
+            while True:
+                # Check for timeout
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    click.secho(f'\nGhostscript timeout ({timeout}s) - terminating process', fg='red')
+                    process.kill()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    return None
 
-        # Wait for process to complete and check return code
-        returncode = process.wait()
+                # Read line with timeout using select/poll on Unix or short timeout on Windows
+                try:
+                    line_bytes = process.stdout.readline()
+                    if not line_bytes:
+                        # EOF reached
+                        break
+
+                    line = line_bytes.decode("utf-8", errors="ignore")
+                    if line.startswith("Page "):
+                        bar.update(1)
+                        last_progress_time = time.time()
+
+                except Exception as e:
+                    click.secho(f'Error reading Ghostscript output: {e}', fg='red')
+                    process.kill()
+                    return None
+
+        # Wait for process to complete with timeout
+        try:
+            returncode = process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            click.secho(f'Ghostscript failed to terminate cleanly - killing process', fg='red')
+            process.kill()
+            process.wait()
+            return None
+
         if returncode != 0:
             click.secho(f'Ghostscript processing failed (exit code {returncode})', fg='red')
             if verbose:
@@ -722,7 +768,7 @@ def run_ghostscript(id: int, verbose: bool, args: List[str]) -> Optional[bool]:
     return True 
     
 
-def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool, bool, bool, str]) -> Dict[str, Any]:
+def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool, bool, bool, str, int]) -> Dict[str, Any]:
     """Process a single PDF file with Ghostscript.
 
     Processes a PDF file using Ghostscript with specified compression or PDF/A
@@ -730,7 +776,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
 
     Args:
         file_info: Tuple containing (id, pdf_file, command_parts, first_argument,
-                   prefix, suffix, keep_smaller, force, verbose, on_error) where:
+                   prefix, suffix, keep_smaller, force, verbose, on_error, timeout) where:
                    - id: Task identifier for progress tracking
                    - pdf_file: Path to input PDF file
                    - command_parts: Ghostscript command arguments
@@ -741,6 +787,7 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
                    - force: If True, allow overwriting original files
                    - verbose: If True, show detailed command output
                    - on_error: Action on file errors ('prompt', 'skip', or 'abort')
+                   - timeout: Maximum processing time in seconds (0 = no timeout)
 
     Returns:
         Dictionary containing processing results with keys:
@@ -757,12 +804,12 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
         - 'on_error': Action on file errors
 
     Example:
-        >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False, "prompt")
+        >>> task = (0, "input.pdf", ["-dPDFSETTINGS=/screen"], [], "", "_compressed", True, False, False, "prompt", 300)
         >>> result = process_file(task)
         >>> print(result['status'])
         success
     """
-    id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error = file_info
+    id, pdf_file, command_parts, first_argument, prefix, suffix, keep_smaller, force, verbose, on_error, timeout = file_info
 
     original_size = os.path.getsize(pdf_file)
 
@@ -776,8 +823,9 @@ def process_file(file_info: Tuple[int, str, List[str], List[str], str, str, bool
     gs_command.extend(first_argument)
     gs_command.append(pdf_file)
 
-    # Run the Ghostscript command
-    status = run_ghostscript(id, verbose, gs_command)
+    # Run the Ghostscript command with timeout (0 = infinite)
+    actual_timeout = timeout if timeout > 0 else float('inf')
+    status = run_ghostscript(id, verbose, gs_command, actual_timeout)
 
     # Return temp file info for finalization in main thread
     if status:
