@@ -116,6 +116,9 @@ gsb *.pdf --compress --pdfa --prefix "processed_"
 
 #### Other Options
 
+- `--timeout INTEGER`: Maximum processing time per file in seconds (default: 300)
+  - Set to `0` to disable timeout protection
+  - Prevents indefinite hangs on problematic PDFs
 - `--open_path` / `--no_open_path`: Open output location in file manager (default: enabled)
 - `-v, --verbose`: Show detailed Ghostscript command output
 - `--version`: Show version information
@@ -258,6 +261,16 @@ Verbose output for debugging:
 gsb document.pdf -v --compress --pdfa
 ```
 
+Process with custom timeout for large files:
+
+```bash
+# Set 10 minute timeout for very large PDFs
+gsb large-document.pdf --compress --timeout 600
+
+# Disable timeout for files that take a long time
+gsb complex-document.pdf --compress --timeout 0
+```
+
 ## Output
 
 After processing completes, gs-batch-pdf displays a detailed summary table:
@@ -312,6 +325,15 @@ If you encounter permission errors when processing files:
 - Use `--prefix` to write to a different directory
 - Check file permissions on both input and output locations
 - On Windows, ensure files aren't open in another program
+
+### Timeout Issues
+
+If processing is hanging or taking too long:
+
+- The default timeout is 5 minutes (300 seconds) per file
+- For large or complex PDFs, increase the timeout: `--timeout 600` (10 minutes)
+- To disable timeout protection: `--timeout 0`
+- Some corrupted PDFs may cause Ghostscript to hang indefinitely - timeout protection will terminate these processes
 
 ## Contributing
 
