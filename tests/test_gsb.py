@@ -728,3 +728,71 @@ def test_on_error_skip_warns_without_prefix():
 
     finally:
         shutil.rmtree(temp_dir)
+
+
+def test_compress_flag_default_value(setup_test_files):
+    """Test that --compress without a value defaults to /ebook."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Test file
+    test_file = os.path.join(temp_dir, "file_1.pdf")
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Use --compress without specifying a value (should default to /ebook)
+    result = runner.invoke(
+        gsb,
+        [
+            "--compress",  # No value - should use flag_value="/ebook"
+            f"--prefix={output_dir}{os.sep}compressed_",
+            "--no_open_path",
+            test_file,
+        ],
+    )
+
+    # Check the command succeeded
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
+    # Verify output file was created
+    output_file = os.path.join(output_dir, "compressed_file_1.pdf")
+    assert os.path.exists(output_file), f"Output file does not exist. CLI output: {result.output}"
+    assert os.path.getsize(output_file) > 0
+
+    # Verify compression happened (file should be smaller)
+    original_size = os.path.getsize(test_file)
+    compressed_size = os.path.getsize(output_file)
+    assert compressed_size < original_size, "File should be compressed with /ebook setting"
+
+
+def test_pdfa_flag_default_value(setup_test_files):
+    """Test that --pdfa without a value defaults to 2 (PDF/A-2)."""
+    temp_dir = setup_test_files
+    runner = CliRunner()
+
+    # Test file
+    test_file = os.path.join(temp_dir, "file_1.pdf")
+    output_dir = os.path.join(temp_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Use --pdfa without specifying a value (should default to 2)
+    result = runner.invoke(
+        gsb,
+        [
+            "--pdfa",  # No value - should use flag_value="2"
+            f"--prefix={output_dir}{os.sep}pdfa_",
+            "--no_open_path",
+            test_file,
+        ],
+    )
+
+    # Check the command succeeded
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
+    # Verify output file was created
+    output_file = os.path.join(output_dir, "pdfa_file_1.pdf")
+    assert os.path.exists(output_file), f"Output file does not exist. CLI output: {result.output}"
+    assert os.path.getsize(output_file) > 0
+
+    # PDF/A conversion always keeps the new file (doesn't compare sizes)
+    # So we just verify it ran successfully
