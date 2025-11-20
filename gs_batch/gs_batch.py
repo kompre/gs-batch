@@ -37,7 +37,7 @@ def get_package_info() -> str:
 
 def get_epilog() -> str:
     """Get formatted epilog with examples and package info."""
-    return f"""Examples: gsb --compress . | gsb -r --compress ./docs/ | gsb --pdfa file.pdf
+    return f"""Examples: gsb --compress . | gsb -r --compress=/screen ./docs/ | gsb --pdfa file.pdf
 
 {get_package_info()}"""
 
@@ -58,17 +58,14 @@ def get_epilog() -> str:
     default=None,
     is_flag=False,
     flag_value="/ebook",
-    show_default=True,
-    type=click.Choice(["/screen", "/ebook", "/printer", "/prepress", "/default"]),
-    help="Compression quality level (e.g., /screen, [/ebook], /printer, /prepress, /default).",
+    help="Compression quality level: /screen, /ebook (default), /printer, /prepress, /default.",
 )
 @click.option(
     "--pdfa",
     is_flag=False,
     flag_value="2",
     default=None,
-    type=click.Choice(["1", "2", "3"]),
-    help="PDF/A version (e.g., 1 for PDF/A-1, 2 for [PDF/A-2], 3 for PDF/A-3).",
+    help="PDF/A version: 1 (PDF/A-1), 2 (PDF/A-2, default), 3 (PDF/A-3).",
 )
 @click.option(
     "--prefix",
@@ -225,6 +222,22 @@ def _gs_batch_impl(
         >>> gs_batch(None, "archive/", "_pdfa", None, "2", tuple(["input.pdf"]),
         ...          False, True, True, "pdf", True, False)
     """
+
+    # Validate compress value
+    if compress is not None:
+        valid_compress = ["/screen", "/ebook", "/printer", "/prepress", "/default"]
+        if compress not in valid_compress:
+            click.secho(f"Error: Invalid --compress value '{compress}'", fg="red", err=True)
+            click.echo(f"Valid values: {', '.join(valid_compress)}", err=True)
+            sys.exit(1)
+
+    # Validate pdfa value
+    if pdfa is not None:
+        valid_pdfa = ["1", "2", "3"]
+        if pdfa not in valid_pdfa:
+            click.secho(f"Error: Invalid --pdfa value '{pdfa}'", fg="red", err=True)
+            click.echo(f"Valid values: {', '.join(valid_pdfa)}", err=True)
+            sys.exit(1)
 
     # Check that Ghostscript is available and functional
     check_ghostscript_available()
