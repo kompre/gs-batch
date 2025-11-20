@@ -1,35 +1,34 @@
 # Click 8.2+ Breaking Change Investigation
 
 ## Summary
-Click 8.2.0+ **broke** `is_flag=False` with `flag_value` pattern, making `--compress` (without value) fail. This wasn't a deliberate design change but a **regression bug** that was partially fixed in 8.2.1/8.2.2 but still broken in 8.3.1.
+Click 8.3.0 **broke** `is_flag=False` with `flag_value` pattern, making `--compress` (without value) fail. This wasn't a deliberate design change but a **regression bug**. The pattern worked correctly in Click 8.2.1 but broke in 8.3.0 and remains broken in 8.3.1.
 
 ## Evidence
 
-### Click 8.1.8 (Working)
+### Click 8.2.1 (Working)
 ```python
-@click.option("--compress", is_flag=False, flag_value="/ebook")
+@click.option("--compress", is_flag=False, flag_value="/ebook", type=click.Choice([...]))
 ```
 ✅ `--compress` → `/ebook`
 ✅ `--compress /screen` → `/screen`
 
-### Click 8.3.1 (Broken)
+### Click 8.3.0/8.3.1 (Broken)
 Same code:
 ❌ `--compress` → Error: "Option '--compress' requires an argument"
 ✅ `--compress /screen` → `/screen`
 
 ## Root Cause
-- **Click 8.2.0**: Regression where `is_flag=False` with `type` parameter broke flag_value handling ([Issue #2894](https://github.com/pallets/click/issues/2894))
-- **Click 8.2.1**: Partial fix for flags with type
-- **Click 8.2.2**: Fixed reconciliation of `default`, `flag_value`, and `type`
-- **Click 8.3.0**: Reworked flag handling broke `is_flag=False` pattern entirely
+- **Click ≤8.2.1**: Pattern works correctly with `is_flag=False` + `flag_value` + `type=Choice`
+- **Click 8.3.0**: Reworked flag handling in this version broke the `is_flag=False` pattern entirely
+- **Click 8.3.1**: Regression persists
 
-The `is_flag=False` + `flag_value` pattern is **non-functional** in Click 8.2+ due to regression. No official deprecation notice exists - it simply stopped working.
+The `is_flag=False` + `flag_value` pattern is **non-functional** in Click 8.3.0+ due to regression. No official deprecation notice exists - it simply stopped working.
 
 ## Solutions
 
-### Option 1: Pin to Click <8.2 (Current)
-**Pros:** No code changes, preserves existing UX
-**Cons:** Misses Click 8.2+ improvements/fixes
+### Option 1: Pin to Click <8.3 (Recommended)
+**Pros:** No code changes, preserves existing UX, includes 8.2.x improvements
+**Cons:** Misses Click 8.3+ improvements
 
 ### Option 2: Custom OptionalChoice Type
 ```python
@@ -56,7 +55,7 @@ class OptionalChoice(click.Choice):
 **Cons:** Breaking API change
 
 ## Recommendation
-**Keep current fix** (Pin to <8.2). This is a Click **regression/bug**, not an official deprecation or designed breaking change. The pattern worked in 8.1.x and should still work. Monitor Click 8.4+ for fixes, or consider filing an issue to clarify Click's intent.
+**Update fix to pin Click <8.3** (currently pinned to <8.2). This is a Click **regression/bug** in 8.3.0, not an official deprecation or designed breaking change. The pattern worked in 8.2.1 and should still work. Monitor Click 8.3.2+ for fixes, or file an issue to clarify Click's intent.
 
 ## Test Results
 Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`) to catch future regressions.
