@@ -60,3 +60,18 @@ class OptionalChoice(click.Choice):
 
 ## Test Results
 Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`) to catch future regressions.
+
+## Click Repository Status
+
+**Known Issues:**
+- **#2140** (Closed 2021): "`flag_value` is ignored" - Same symptom but closed without clear resolution
+- **#2897** (Open 2025): Boolean flags broken in 8.2.0 - Different but related issue
+- **#2894** (Referenced): Click 8.2.0 ignores `is_flag` options with type
+
+**Not Clearly Reported:** The specific regression where `is_flag=False` + `flag_value` worked in 8.1.x but broke in 8.3.x doesn't have a clear open issue.
+
+**Verdict:** This may warrant a new issue report showing:
+1. Pattern worked in Click 8.1.8
+2. Broke in Click 8.2.0/8.3.x
+3. Minimal reproduction case
+4. Request for either: fix the regression OR update docs to deprecate pattern
