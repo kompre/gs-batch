@@ -62,18 +62,25 @@ Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`)
 
 ## Click Repository Status
 
-**Known Issues:**
-- **#2140** (Closed 2021): "`flag_value` is ignored" - Same symptom but closed without clear resolution
-- **#2897** (Open 2025): Boolean flags broken in 8.2.0 - Different but related issue
-- **#2894** (Referenced): Click 8.2.0 ignores `is_flag` options with type
+**Click 8.3.0 Deliberate Changes:**
+- **PR #3030**: Major refactoring of flag_value handling
+  - Introduced `UNSET` sentinel value to distinguish "no value" from "None as value"
+  - Fixed issues: #1992, #2514, #2610, #3024, #3030
+  - **Side effect**: Broke `is_flag=False` + `flag_value` pattern (unintentional)
 
-**Not Clearly Reported:** The specific regression where `is_flag=False` + `flag_value` worked in 8.1.x but broke in 8.3.x doesn't have a clear open issue.
+**Related Issues:**
+- **#2140** (Closed 2021): "`flag_value` is ignored" - Similar symptom
+- **#2897** (Open 2025): Boolean flags broken in 8.2.0
+- **#2894**: Click 8.2.0 ignores `is_flag` options with type
 
-**Verdict:** This may warrant a new issue report showing:
-1. Pattern worked in Click 8.1.8
-2. Broke in Click 8.2.0/8.3.x without announcement
-3. Minimal reproduction case
-4. Request clarification: is this a bug to fix, or intentional removal requiring migration path?
+**Root Cause Analysis:**
+The 8.3.0 flag handling refactor (PR #3030) was intended to fix edge cases with `flag_value=None` and `default` interactions. However, it inadvertently broke the `is_flag=False` + `flag_value` pattern that worked in 8.2.x.
+
+**Verdict:** This is an **unintentional regression** from the 8.3.0 refactoring. Worth reporting as:
+1. Pattern worked in Click ≤8.2.1
+2. Broke in Click 8.3.0 as side effect of PR #3030
+3. Not mentioned in release notes or migration guide
+4. Request: restore pattern OR document breaking change with migration path
 
 
 ## GitHub Issue Draft
@@ -145,9 +152,17 @@ This worked in Click 8.2.1 and earlier versions.
   - 8.3.1: ❌ Still broken
 - OS: Windows 11
 
-## Related Issues
+## Related Issues and Context
 
-This may be related to:
+**Click 8.3.0 Changes:**
+This regression appears to be an unintended side effect of PR #3030, which refactored flag handling to fix:
+- #1992: Binary flags vs `default=None` semantics
+- #2514: Make `flag_value=None` actually work
+- #2610, #3024, #3030: Other flag_value inconsistencies
+
+The PR introduced an `UNSET` sentinel value to better handle `flag_value` and `default` interactions, but inadvertently broke the `is_flag=False` + `flag_value` pattern.
+
+**Other Related Issues:**
 - #2894 (Click 8.2.0 ignores is_flag options with type)
 - #2140 (flag_value is ignored - closed)
 
