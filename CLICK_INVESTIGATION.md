@@ -79,15 +79,15 @@ Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`)
 
 ## GitHub Issue Draft
 
-**Title:** `is_flag=False` with `flag_value` stopped working in Click 8.2+ (regression from 8.1.x)
+**Title:** `is_flag=False` with `flag_value` stopped working in Click 8.3.0 (regression from 8.2.x)
 
 **Description:**
 
-The pattern `is_flag=False` with `flag_value` worked in Click 8.1.x but broke in Click 8.2.0+ without announcement. This appears to be an unintentional regression rather than a designed breaking change.
+The pattern `is_flag=False` with `flag_value` worked in Click 8.2.x but broke in Click 8.3.0 without announcement. This appears to be an unintentional regression rather than a designed breaking change. 
 
 ## Bug Description
 
-Using `@click.option()` with `is_flag=False` and `flag_value` set allows an option to work both as a flag (using the flag_value) and with an explicit value. This pattern worked in Click 8.1.x but fails in 8.2.0+ with "Option requires an argument" error.
+Using `@click.option()` with `is_flag=False` and `flag_value` set allows an option to work both as a flag (using the flag_value) and with an explicit value. This pattern worked in Click ≤8.2.1 but fails in 8.3.0+ with "Option requires an argument" error.
 
 ## Minimal Reproduction
 
@@ -100,6 +100,7 @@ import click
     default=None,
     is_flag=False,
     flag_value="/ebook",
+    type=click.Choice(["/ebook", "/screen"]),
 )
 def test_cmd(compress):
     click.echo(f"compress = {compress!r}")
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     test_cmd()
 ```
 
-**Click 8.1.8 behavior (working):**
+**Click 8.2.1 behavior (working):**
 ```bash
 $ python test.py --compress
 compress = '/ebook'
@@ -117,7 +118,7 @@ $ python test.py --compress /screen
 compress = '/screen'
 ```
 
-**Click 8.3.1 behavior (broken):**
+**Click 8.3.0/8.3.1 behavior (broken):**
 ```bash
 $ python test.py --compress
 Error: Option '--compress' requires an argument.
@@ -132,13 +133,18 @@ When using `is_flag=False` with `flag_value="/ebook"`, the option should:
 1. Accept `--compress` alone and use the flag_value (`/ebook`)
 2. Accept `--compress /screen` and use the provided value
 
-This is the documented behavior and worked in Click 8.1.x.
+This worked in Click 8.2.1 and earlier versions.
 
 ## Environment
 
 - Python version: 3.13.3 (also tested on 3.12)
-- Click version: 8.3.1 (broken), 8.1.8 (works)
-- OS: Windows 11 / Linux
+- Click versions tested:
+  - 8.2.0: ✅ Works
+  - 8.2.1: ✅ Works
+  - 8.2.2: ⚠️ Yanked ("Unintended change in behavior")
+  - 8.3.0: ❌ **BROKEN** (regression introduced)
+  - 8.3.1: ❌ Still broken
+- OS: Windows 11
 
 ## Related Issues
 
@@ -150,13 +156,19 @@ This may be related to:
 
 Is this regression intentional? If so:
 1. Should this pattern be officially deprecated with migration guidance?
-2. What's the recommended alternative for Click 8.2+?
+2. What's the recommended alternative for Click 8.3+?
 
-If unintentional, can the 8.1.x behavior be restored?
+If unintentional, can the 8.2.x behavior be restored in 8.3.2+?
 
 ## Impact
 
 This breaks existing CLIs that relied on this pattern, requiring either:
-- Pin to Click <8.2 (loses security/bug fixes)
+- Pin to Click <8.3 (loses Click 8.3+ improvements)
 - Rewrite options with different UX
 - Implement custom workarounds
+
+## Regression Timeline
+
+- Click ≤8.2.1: Pattern works correctly
+- Click 8.3.0: **Regression introduced** - `is_flag=False` + `flag_value` stops working
+- Click 8.3.1: Regression persists
