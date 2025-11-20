@@ -23,7 +23,7 @@ Same code:
 - **Click 8.2.2**: Fixed reconciliation of `default`, `flag_value`, and `type`
 - **Click 8.3.0**: Reworked flag handling broke `is_flag=False` pattern entirely
 
-The `is_flag=False` + `flag_value` pattern is now **deprecated/broken** in Click 8.2+.
+The `is_flag=False` + `flag_value` pattern is **non-functional** in Click 8.2+ due to regression. No official deprecation notice exists - it simply stopped working.
 
 ## Solutions
 
@@ -56,7 +56,7 @@ class OptionalChoice(click.Choice):
 **Cons:** Breaking API change
 
 ## Recommendation
-**Keep current fix** (Pin to <8.2). This is a Click regression, not a designed breaking change. The `is_flag=False` pattern should work but doesn't. Monitor Click 8.4+ for fixes to this regression.
+**Keep current fix** (Pin to <8.2). This is a Click **regression/bug**, not an official deprecation or designed breaking change. The pattern worked in 8.1.x and should still work. Monitor Click 8.4+ for fixes, or consider filing an issue to clarify Click's intent.
 
 ## Test Results
 Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`) to catch future regressions.
@@ -72,6 +72,6 @@ Added tests (`test_compress_flag_default_value`, `test_pdfa_flag_default_value`)
 
 **Verdict:** This may warrant a new issue report showing:
 1. Pattern worked in Click 8.1.8
-2. Broke in Click 8.2.0/8.3.x
+2. Broke in Click 8.2.0/8.3.x without announcement
 3. Minimal reproduction case
-4. Request for either: fix the regression OR update docs to deprecate pattern
+4. Request clarification: is this a bug to fix, or intentional removal requiring migration path?
