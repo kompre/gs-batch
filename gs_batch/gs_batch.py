@@ -55,16 +55,16 @@ def get_epilog() -> str:
 )
 @click.option(
     "--compress",
-    default=None,
     is_flag=False,
     flag_value="/ebook",
+    type=click.Choice(["/screen", "/ebook", "/printer", "/prepress", "/default"]),
     help="Compression quality level: /screen, /ebook (default), /printer, /prepress, /default.",
 )
 @click.option(
     "--pdfa",
     is_flag=False,
     flag_value="2",
-    default=None,
+    type=click.Choice(["1", "2", "3"]),
     help="PDF/A version: 1 (PDF/A-1), 2 (PDF/A-2, default), 3 (PDF/A-3).",
 )
 @click.option(
@@ -223,22 +223,6 @@ def _gs_batch_impl(
         ...          False, True, True, "pdf", True, False)
     """
 
-    # Validate compress value
-    if compress is not None:
-        valid_compress = ["/screen", "/ebook", "/printer", "/prepress", "/default"]
-        if compress not in valid_compress:
-            click.secho(f"Error: Invalid --compress value '{compress}'", fg="red", err=True)
-            click.echo(f"Valid values: {', '.join(valid_compress)}", err=True)
-            sys.exit(1)
-
-    # Validate pdfa value
-    if pdfa is not None:
-        valid_pdfa = ["1", "2", "3"]
-        if pdfa not in valid_pdfa:
-            click.secho(f"Error: Invalid --pdfa value '{pdfa}'", fg="red", err=True)
-            click.echo(f"Valid values: {', '.join(valid_pdfa)}", err=True)
-            sys.exit(1)
-
     # Check that Ghostscript is available and functional
     check_ghostscript_available()
 
@@ -285,14 +269,18 @@ def _gs_batch_impl(
                 "(Use the `--force` flag to allow overwriting original files and skip this messages)",
                 fg="black",
             )
-            response = click.prompt(
-                "Do you want to overwrite original files?",
-                default="n",
-                type=click.Choice(["y", "n"]),
-            )
-            if response == "y":
-                force = True
-            else:
+            try:
+                response = click.prompt(
+                    "Do you want to overwrite original files?",
+                    default="n",
+                    type=click.Choice(["y", "n"]),
+                )
+                if response == "y":
+                    force = True
+                else:
+                    click.echo("Aborting...")
+                    return
+            except click.Abort:
                 click.echo("Aborting...")
                 return
 
@@ -966,15 +954,18 @@ def prompt_retry_skip_abort(filename: str, error: Exception, on_error: str) -> s
         click.echo("  [s]kip   - Skip this file and continue with the next one")
         click.echo("  [a]bort  - Stop processing all files and exit")
 
-        response = click.prompt(
-            "\nChoose action",
-            type=click.Choice(['r', 's', 'a'], case_sensitive=False),
-            default='r',
-            show_default=True
-        )
-
-        action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
-        return action_map[response.lower()]
+        try:
+            response = click.prompt(
+                "\nChoose action",
+                type=click.Choice(['r', 's', 'a'], case_sensitive=False),
+                default='r',
+                show_default=True
+            )
+            action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
+            return action_map[response.lower()]
+        except click.Abort:
+            click.echo("  Aborting batch (user cancelled)")
+            return "abort"
 
 
 def retry_file_operation(operation, filename: str, op_type: str, on_error: str) -> None:
