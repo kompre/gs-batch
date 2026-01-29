@@ -55,16 +55,16 @@ def get_epilog() -> str:
 )
 @click.option(
     "--compress",
-    default=None,
     is_flag=False,
     flag_value="/ebook",
+    type=click.Choice(["/screen", "/ebook", "/printer", "/prepress", "/default"]),
     help="Compression quality level: /screen, /ebook (default), /printer, /prepress, /default.",
 )
 @click.option(
     "--pdfa",
     is_flag=False,
     flag_value="2",
-    default=None,
+    type=click.Choice(["1", "2", "3"]),
     help="PDF/A version: 1 (PDF/A-1), 2 (PDF/A-2, default), 3 (PDF/A-3).",
 )
 @click.option(
@@ -223,22 +223,6 @@ def _gs_batch_impl(
         ...          False, True, True, "pdf", True, False)
     """
 
-    # Validate compress value
-    if compress is not None:
-        valid_compress = ["/screen", "/ebook", "/printer", "/prepress", "/default"]
-        if compress not in valid_compress:
-            click.secho(f"Error: Invalid --compress value '{compress}'", fg="red", err=True)
-            click.echo(f"Valid values: {', '.join(valid_compress)}", err=True)
-            sys.exit(1)
-
-    # Validate pdfa value
-    if pdfa is not None:
-        valid_pdfa = ["1", "2", "3"]
-        if pdfa not in valid_pdfa:
-            click.secho(f"Error: Invalid --pdfa value '{pdfa}'", fg="red", err=True)
-            click.echo(f"Valid values: {', '.join(valid_pdfa)}", err=True)
-            sys.exit(1)
-
     # Check that Ghostscript is available and functional
     check_ghostscript_available()
 
@@ -285,14 +269,18 @@ def _gs_batch_impl(
                 "(Use the `--force` flag to allow overwriting original files and skip this messages)",
                 fg="black",
             )
-            response = click.prompt(
-                "Do you want to overwrite original files?",
-                default="n",
-                type=click.Choice(["y", "n"]),
-            )
-            if response == "y":
-                force = True
-            else:
+            try:
+                response = click.prompt(
+                    "Do you want to overwrite original files?",
+                    default="n",
+                    type=click.Choice(["y", "n"]),
+                )
+                if response == "y":
+                    force = True
+                else:
+                    click.echo("Aborting...")
+                    return
+            except click.Abort:
                 click.echo("Aborting...")
                 return
 
@@ -591,39 +579,14 @@ def check_ghostscript_available() -> None:
         sys.exit(1)
 
 
-def get_total_page_count(p: subprocess.CompletedProcess) -> int:
-    """Extract the total number of pages from Ghostscript PDF info output.
-
-    Parses the last token from Ghostscript's -dPDFINFO output which contains
-    the page count.
-
-    Args:
-        p: Completed subprocess result from Ghostscript with -dPDFINFO flag.
-
-    Returns:
-        Total number of pages in the PDF file.
-
-    Raises:
-        ValueError: If the output cannot be parsed as an integer.
-
-    Example:
-        >>> result = subprocess.run(["gs", "-dPDFINFO", "-dBATCH", "-dNODISPLAY", "file.pdf"],
-        ...                         capture_output=True, text=True)
-        >>> pages = get_total_page_count(result)
-        >>> print(pages)
-        10
-    """
-    return int(
-        p.stdout.split(" ")[-1].replace(".", "")
-    )
-
 def run_ghostscript(id: int, verbose: bool, args: List[str], timeout: float = 300) -> Optional[bool]:
     """Run Ghostscript command with progress tracking and timeout protection.
 
     Executes Ghostscript on a PDF file while displaying a progress bar that
-    tracks page processing. The function first determines the total page count,
-    then runs the main Ghostscript command and updates progress as each page
-    is processed. Includes timeout protection to prevent indefinite hangs.
+    tracks page processing. The function first determines the total page count
+    using the pdfpagecount PostScript operator, then runs the main Ghostscript
+    command and updates progress as each page is processed. Includes timeout
+    protection to prevent indefinite hangs.
 
     Args:
         id: Task identifier for progress bar positioning in multiprocessing.
@@ -637,7 +600,8 @@ def run_ghostscript(id: int, verbose: bool, args: List[str], timeout: float = 30
 
     Raises:
         subprocess.CalledProcessError: If Ghostscript command fails.
-        ValueError: If PDF page count cannot be determined.
+        subprocess.TimeoutExpired: If page count query times out.
+        ValueError: If PDF page count cannot be parsed.
 
     Example:
         >>> args = ["-sDEVICE=pdfwrite", "-o", "output.pdf", "input.pdf"]
@@ -651,60 +615,46 @@ def run_ghostscript(id: int, verbose: bool, args: List[str], timeout: float = 30
     if verbose:
         click.echo(f"Running command: {' '.join(full_command)}")
 
-    # Get total page count from the file (last argument in args)
+    # Get total page count using pdfpagecount PostScript operator
     try:
+        # Convert to absolute path for --permit-file-read (required for SAFER mode)
+        pdf_path = os.path.abspath(args[-1])
+
+        # Build PostScript command for page count
+        ps_code = f"({pdf_path}) (r) file runpdfbegin pdfpagecount = quit"
         result = subprocess.run(
-                [gs_command, "-dPDFINFO", "-dBATCH", "-dNODISPLAY", args[-1]],
-                capture_output=True,
-            )
+            [gs_command, "-q", "-dNODISPLAY", f"--permit-file-read={pdf_path}", "-c", ps_code],
+            capture_output=True,
+            timeout=5
+        )
 
         # Check if Ghostscript command succeeded
         if result.returncode != 0:
             stderr_text = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
-            click.secho(f'Ghostscript failed to get PDF info (exit code {result.returncode})', fg='red')
+            click.secho(f'Failed to get page count (exit code {result.returncode})', fg='red')
             if verbose and stderr_text:
                 click.echo(f"Ghostscript stderr: {stderr_text}", err=True)
             return None
 
-        # Decode output with error handling for non-UTF-8 characters
+        # Parse output: just strip whitespace and convert to int
         try:
-            stdout_text = result.stdout.decode('utf-8')
-        except UnicodeDecodeError:
-            # Try common alternative encodings
-            try:
-                stdout_text = result.stdout.decode('latin-1')
-            except UnicodeDecodeError:
-                stdout_text = result.stdout.decode('utf-8', errors='replace')
+            stdout_text = result.stdout.decode('utf-8', errors='replace').strip()
+            total_length = int(stdout_text)
+        except ValueError as e:
+            click.secho(f'Failed to parse page count: {e}', fg='red')
+            click.secho(f'Ghostscript output: {result.stdout!r}', fg='red')
+            return None
 
-        # Create a compatible result object with decoded text
-        # Using a simple object to hold stdout as string for get_total_page_count
-        from types import SimpleNamespace
-        decoded_result = SimpleNamespace(
-            stdout=stdout_text,
-            stderr=result.stderr.decode('utf-8', errors='replace') if result.stderr else '',
-            returncode=result.returncode
-        )
-        total_length = get_total_page_count(decoded_result)  # type: ignore[arg-type]
-
-        # Log stderr if present and verbose
-        if verbose and decoded_result.stderr:
-            click.echo(f"Ghostscript stderr: {decoded_result.stderr}", err=True)
-
+    except subprocess.TimeoutExpired:
+        click.secho(f'Timeout getting page count for "{args[-1]}"', fg='red')
+        return None
     except subprocess.CalledProcessError as e:
         click.echo(f"Error executing Ghostscript: {e}")
         if verbose and e.stderr:
             click.echo(f"Stderr: {e.stderr}", err=True)
         return None
-    except ValueError as e:
-        click.secho(f'ValueError: {e}', fg='red')
-        click.secho(f'Cannot determine total number of pages. Possibly "{args[-1]}" is broken? (e.g. size 0kB)', fg='red')
-        return None
-    except UnicodeDecodeError as e:
-        click.secho(f'UnicodeDecodeError: {e}', fg='red')
-        click.secho(f'Cannot decode Ghostscript output. This may be a locale/encoding issue.', fg='red')
-        return None
     except Exception as e:
-        click.secho(f'Unexpected error: {e}', fg='red')
+        click.secho(f'Unexpected error getting page count: {e}', fg='red')
         return None
 
 
@@ -966,15 +916,18 @@ def prompt_retry_skip_abort(filename: str, error: Exception, on_error: str) -> s
         click.echo("  [s]kip   - Skip this file and continue with the next one")
         click.echo("  [a]bort  - Stop processing all files and exit")
 
-        response = click.prompt(
-            "\nChoose action",
-            type=click.Choice(['r', 's', 'a'], case_sensitive=False),
-            default='r',
-            show_default=True
-        )
-
-        action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
-        return action_map[response.lower()]
+        try:
+            response = click.prompt(
+                "\nChoose action",
+                type=click.Choice(['r', 's', 'a'], case_sensitive=False),
+                default='r',
+                show_default=True
+            )
+            action_map = {'r': 'retry', 's': 'skip', 'a': 'abort'}
+            return action_map[response.lower()]
+        except click.Abort:
+            click.echo("  Aborting batch (user cancelled)")
+            return "abort"
 
 
 def retry_file_operation(operation, filename: str, op_type: str, on_error: str) -> None:
