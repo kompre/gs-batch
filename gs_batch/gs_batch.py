@@ -621,7 +621,10 @@ def run_ghostscript(id: int, verbose: bool, args: List[str], timeout: float = 30
         pdf_path = os.path.abspath(args[-1])
 
         # Build PostScript command for page count
-        ps_code = f"({pdf_path}) (r) file runpdfbegin pdfpagecount = quit"
+        # Use forward slashes in the PS string: on Windows os.path.abspath returns
+        # backslashes which are escape characters in PostScript strings.
+        pdf_path_ps = pdf_path.replace('\\', '/')
+        ps_code = f"({pdf_path_ps}) (r) file runpdfbegin pdfpagecount = quit"
         result = subprocess.run(
             [gs_command, "-q", "-dNODISPLAY", f"--permit-file-read={pdf_path}", "-c", ps_code],
             capture_output=True,
